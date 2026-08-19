@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ForoU - Iniciar Sesión</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/theme.css">
+</head>
+<body class="min-h-screen">
+  <div id="navbar"></div>
+
+  <div class="max-w-md mx-auto px-4 py-16">
+    <div class="card rounded-lg p-8">
+      <h1 class="text-2xl font-bold text-primary mb-6 text-center">Iniciar Sesión</h1>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-secondary mb-1">Email</label>
+          <input type="email" name="email" required
+                 class="w-full input-field rounded px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-secondary mb-1">Contraseña</label>
+          <input type="password" name="password" required
+                 class="w-full input-field rounded px-3 py-2">
+        </div>
+        <button type="submit" class="w-full btn-primary py-2 rounded font-medium">
+          Entrar
+        </button>
+      </form>
+
+      <div id="msg" class="text-center mt-4"></div>
+
+      <p class="text-center text-sm text-muted mt-6">
+        ¿No tenés cuenta? <a href="/register.html" class="link-theme hover:underline">Registrate</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>initLoginForm();</script>
+</body>
+</html>
