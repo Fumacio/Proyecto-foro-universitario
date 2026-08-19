@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ForoU - Inicio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/theme.css">
+</head>
+<body class="min-h-screen">
+  <div id="navbar"></div>
+
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold text-primary mb-2">Foro Universitario</h1>
+    <p class="text-secondary mb-8">Elegí una categoría para ver los posts</p>
+
+    <div id="categories" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <p class="text-muted">Cargando categorías...</p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="/js/index.js"></script>
+</body>
+</html>

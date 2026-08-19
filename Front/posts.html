@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ForoU - Posts</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/theme.css">
+</head>
+<body class="min-h-screen">
+  <div id="navbar"></div>
+
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <a href="/" class="link-theme hover:underline text-sm">← Volver al inicio</a>
+        <h1 id="category-name" class="text-2xl font-bold text-primary mt-2">Cargando...</h1>
+      </div>
+      <button id="new-post-btn" onclick="showNewPostForm()" class="hidden btn-primary px-4 py-2 rounded text-sm">
+        + Nuevo Post
+      </button>
+    </div>
+
+    <div id="new-post-form" class="hidden card rounded-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold text-primary mb-4">Nuevo Post</h2>
+      <form id="create-post-form" class="space-y-3">
+        <input type="text" name="title" placeholder="Título" required
+               class="w-full input-field rounded px-3 py-2 text-sm">
+        <textarea name="content" placeholder="Contenido del post..." required rows="4"
+                  class="w-full input-field rounded px-3 py-2 text-sm"></textarea>
+        <div class="flex gap-2">
+          <button type="submit" class="btn-primary px-4 py-1.5 rounded text-sm">Publicar</button>
+          <button type="button" onclick="hideNewPostForm()" class="text-muted hover:text-secondary text-sm">Cancelar</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="posts" class="space-y-3">
+      <p class="text-muted">Cargando posts...</p>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script src="/js/posts.js"></script>
+</body>
+</html>
