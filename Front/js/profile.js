@@ -19,12 +19,16 @@ async function loadProfile() {
 
     const data = await api.get(`/users/${userId}`);
 
+    const avatarHtml = data.avatar_url
+      ? `<img src="${data.avatar_url}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
+      : `<div class="w-16 h-16 rounded-full flex items-center justify-center" style="background-color: var(--orange-light)">
+           <span class="text-2xl font-bold" style="color: var(--orange)">${escapeHtml(data.username.charAt(0).toUpperCase())}</span>
+         </div>`;
+
     container.innerHTML = `
       <div class="card rounded-lg p-6">
         <div class="flex items-center gap-4 mb-6">
-          <div class="w-16 h-16 rounded-full flex items-center justify-center" style="background-color: var(--orange-light)">
-            <span class="text-2xl font-bold" style="color: var(--orange)">${escapeHtml(data.username.charAt(0).toUpperCase())}</span>
-          </div>
+          ${avatarHtml}
           <div>
             <h1 class="text-xl font-bold text-primary">${escapeHtml(data.username)}</h1>
             <span class="text-xs badge-${data.role} px-2 py-0.5 rounded-full">${escapeHtml(data.role)}</span>
@@ -43,8 +47,12 @@ async function loadProfile() {
         </div>
 
         ${isOwn ? `
-          <div class="mt-4 pt-4 border-t border-theme">
+          <div class="mt-4 pt-4 border-t border-theme flex gap-3">
             <button onclick="showEditProfile()" class="btn-secondary px-4 py-2 rounded text-sm">Editar perfil</button>
+            <label class="btn-secondary px-4 py-2 rounded text-sm cursor-pointer">
+              Cambiar avatar
+              <input type="file" accept="image/*" class="hidden" onchange="uploadAvatar(event)">
+            </label>
           </div>
         ` : ''}
       </div>
@@ -119,6 +127,40 @@ async function submitEditProfile(e) {
     loadProfile();
   } catch (err) {
     alert(err.error || 'Error al actualizar perfil');
+  }
+}
+
+async function uploadAvatar(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('La imagen no puede superar 5MB');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('avatar', file);
+
+  try {
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/users/avatar', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw data;
+
+    const user = getUser();
+    user.avatar_url = data.avatar_url;
+    localStorage.setItem('user', JSON.stringify(user));
+
+    if (typeof renderNav === 'function') renderNav();
+    loadProfile();
+  } catch (err) {
+    alert(err.error || 'Error al subir avatar');
   }
 }
 

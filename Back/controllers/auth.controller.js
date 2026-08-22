@@ -68,7 +68,7 @@ const login = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url } });
   } catch (err) {
     res.status(500).json({ error: 'Error al iniciar sesión' });
   }
@@ -131,7 +131,7 @@ const updateProfile = async (req, res) => {
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
 
     const updated = await pool.query(
-      'SELECT u.id, u.username, u.email, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [userId]
     );
 
@@ -142,7 +142,7 @@ const updateProfile = async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role } });
+    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url } });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar perfil' });
   }

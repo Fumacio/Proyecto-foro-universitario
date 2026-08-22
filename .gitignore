@@ -1,2 +1,6 @@
 node_modules/
 .env
+Back/uploads/avatars/*
+Back/uploads/posts/*
+!Back/uploads/avatars/.gitkeep
+!Back/uploads/posts/.gitkeep

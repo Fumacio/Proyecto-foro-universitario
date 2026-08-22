@@ -7,12 +7,18 @@ async function loadCategories() {
     document.getElementById('search-title').textContent = `Resultados para "${query}"`;
     document.getElementById('search-title').classList.remove('hidden');
     document.getElementById('browse-title').classList.add('hidden');
+    document.getElementById('search-subtitle').classList.remove('hidden');
+    document.getElementById('browse-subtitle').classList.add('hidden');
+    container.className = 'space-y-3';
     await searchPosts(query);
     return;
   }
 
   document.getElementById('search-title').classList.add('hidden');
   document.getElementById('browse-title').classList.remove('hidden');
+  document.getElementById('search-subtitle').classList.add('hidden');
+  document.getElementById('browse-subtitle').classList.remove('hidden');
+  container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
 
   try {
     const categories = await api.get('/categories');
@@ -58,7 +64,7 @@ async function searchPosts(query, page = 1) {
     container.innerHTML = posts.map(post => `
       <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
         <div class="flex items-start justify-between">
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
             <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
             <div class="flex items-center gap-4 mt-2 text-xs text-muted">
@@ -67,7 +73,7 @@ async function searchPosts(query, page = 1) {
               <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>
             </div>
           </div>
-          <div class="text-right ml-4">
+          <div class="text-right ml-4 flex-shrink-0">
             <div class="vote-group">
               <span class="vote-btn" style="color: var(--green); font-size: 10px;">▲</span>
               <span class="vote-count ${post.vote_count > 0 ? 'vote-positive' : post.vote_count < 0 ? 'vote-negative' : 'vote-neutral'}">${post.vote_count}</span>

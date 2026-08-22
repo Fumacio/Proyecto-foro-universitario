@@ -9,7 +9,7 @@ const getAll = async (req, res) => {
 
     let countQuery = 'SELECT COUNT(*) AS total FROM posts p';
     let query = `
-      SELECT p.*, u.username, c.name AS category_name,
+      SELECT p.*, u.username, u.avatar_url, c.name AS category_name,
         (SELECT COALESCE(SUM(v.value), 0) FROM votes v WHERE v.post_id = p.id) AS vote_count,
         (SELECT COUNT(*) FROM comments cm WHERE cm.post_id = p.id) AS comment_count
       FROM posts p
@@ -61,7 +61,7 @@ const getAll = async (req, res) => {
 const getById = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT p.*, u.username, c.name AS category_name,
+      `SELECT p.*, u.username, u.avatar_url, c.name AS category_name,
         (SELECT COALESCE(SUM(v.value), 0) FROM votes v WHERE v.post_id = p.id) AS vote_count
       FROM posts p
       JOIN users u ON p.user_id = u.id
@@ -82,18 +82,18 @@ const getById = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { title, content, category_id } = req.body;
+    const { title, content, category_id, image_url } = req.body;
 
     if (!title || !content || !category_id) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (title, content, category_id)' });
     }
 
     const [result] = await pool.query(
-      'INSERT INTO posts (user_id, category_id, title, content) VALUES (?, ?, ?, ?)',
-      [req.user.id, category_id, title, content]
+      'INSERT INTO posts (user_id, category_id, title, content, image_url) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, category_id, title, content, image_url || null]
     );
 
-    res.status(201).json({ id: result.insertId, title, content, category_id });
+    res.status(201).json({ id: result.insertId, title, content, category_id, image_url: image_url || null });
   } catch {
     res.status(500).json({ error: 'Error al crear post' });
   }
@@ -150,4 +150,17 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove };
+const uploadImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se envió ningún archivo' });
+    }
+
+    const imageUrl = `/uploads/posts/${req.file.filename}`;
+    res.json({ image_url: imageUrl });
+  } catch {
+    res.status(500).json({ error: 'Error al subir imagen' });
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, uploadImage };

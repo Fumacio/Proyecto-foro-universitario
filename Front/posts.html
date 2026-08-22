@@ -28,6 +28,12 @@
                class="w-full input-field rounded px-3 py-2 text-sm">
         <textarea name="content" placeholder="Contenido del post..." required rows="4"
                   class="w-full input-field rounded px-3 py-2 text-sm"></textarea>
+        <div>
+          <label class="text-secondary text-xs mb-1 block">Imagen (opcional)</label>
+          <input type="file" accept="image/*" onchange="uploadPostImage(event)"
+                 class="w-full text-sm text-secondary file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-[#333] file:text-[#f0f0f0] hover:file:bg-[#444]">
+          <div id="image-preview" class="mt-2"></div>
+        </div>
         <div class="flex gap-2">
           <button type="submit" class="btn-primary px-4 py-1.5 rounded text-sm">Publicar</button>
           <button type="button" onclick="hideNewPostForm()" class="text-muted hover:text-secondary text-sm">Cancelar</button>

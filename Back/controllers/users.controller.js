@@ -3,7 +3,7 @@ const pool = require('../db/connection');
 const getAll = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
     );
     res.json(rows);
   } catch {
@@ -14,7 +14,7 @@ const getAll = async (req, res) => {
 const getById = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [req.params.id]
     );
 
@@ -65,4 +65,19 @@ const remove = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, update, remove };
+const uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se envió ningún archivo' });
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    await pool.query('UPDATE users SET avatar_url = ? WHERE id = ?', [avatarUrl, req.user.id]);
+
+    res.json({ avatar_url: avatarUrl });
+  } catch {
+    res.status(500).json({ error: 'Error al subir avatar' });
+  }
+};
+
+module.exports = { getAll, getById, update, remove, uploadAvatar };
