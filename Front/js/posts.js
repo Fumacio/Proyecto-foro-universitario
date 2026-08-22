@@ -1,6 +1,7 @@
 let categoryId = null;
 let currentPage = 1;
 const POSTS_PER_PAGE = 20;
+let pendingImageUrl = null;
 
 function getCategoryId() {
   const params = new URLSearchParams(window.location.search);
@@ -54,6 +55,7 @@ async function loadPosts(page = 1) {
       <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
         <div class="flex items-start justify-between">
           <div class="flex-1">
+            ${post.image_url ? `<img src="${post.image_url}" alt="" class="w-full rounded mb-2 max-h-32 object-cover" onerror="this.remove()">` : ''}
             <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
             <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
             <div class="flex items-center gap-4 mt-2 text-xs text-muted">
@@ -118,14 +120,47 @@ document.getElementById('create-post-form').addEventListener('submit', async (e)
     await api.post('/posts', {
       title: form.title.value.trim(),
       content: form.content.value.trim(),
-      category_id: Number(categoryId)
+      category_id: Number(categoryId),
+      image_url: pendingImageUrl
     });
     form.reset();
+    pendingImageUrl = null;
+    document.getElementById('image-preview').innerHTML = '';
     hideNewPostForm();
     loadPosts(1);
   } catch (err) {
     alert(err.error || 'Error al crear post');
   }
 });
+
+async function uploadPostImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('La imagen no puede superar 5MB');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/posts/upload-image', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw data;
+
+    pendingImageUrl = data.image_url;
+    document.getElementById('image-preview').innerHTML = `<img src="${data.image_url}" alt="Preview" class="rounded max-h-32 object-cover">`;
+  } catch (err) {
+    alert(err.error || 'Error al subir imagen');
+  }
+}
 
 loadPosts();

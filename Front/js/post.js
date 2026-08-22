@@ -42,13 +42,17 @@ async function loadPost() {
     const user = getUser();
     const canEdit = user && (user.id === post.user_id || user.role === 'admin');
 
+    const avatarHtml = post.avatar_url
+      ? `<img src="${post.avatar_url}" alt="" class="w-6 h-6 rounded-full object-cover inline-block">`
+      : '';
+
     container.innerHTML = `
       <div class="card rounded-lg p-6">
         <div class="flex items-start justify-between mb-4">
           <div>
             <h1 class="text-2xl font-bold text-primary">${escapeHtml(post.title)}</h1>
             <div class="flex items-center gap-3 mt-2 text-sm text-secondary">
-              <span>por <a href="/profile.html?user_id=${post.user_id}" class="link-theme hover:underline">${escapeHtml(post.username)}</a></span>
+              <span class="flex items-center gap-1">${avatarHtml}por <a href="/profile.html?user_id=${post.user_id}" class="link-theme hover:underline">${escapeHtml(post.username)}</a></span>
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
               <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>
             </div>
@@ -60,6 +64,7 @@ async function loadPost() {
             ` : ''}
           </div>
         </div>
+        ${post.image_url ? `<img src="${post.image_url}" alt="Imagen del post" class="rounded-lg max-h-96 object-contain mb-4" onerror="this.remove()">` : ''}
         <div class="text-secondary whitespace-pre-wrap">${escapeHtml(post.content)}</div>
         <div id="edit-post-form" class="hidden mt-4">
           <form onsubmit="submitEditPost(event)" class="space-y-3">
@@ -114,10 +119,15 @@ function renderComment(comment) {
   const user = getUser();
   const canEdit = user && (user.id === comment.user_id || user.role === 'admin');
 
+  const avatarHtml = comment.avatar_url
+    ? `<img src="${comment.avatar_url}" alt="" class="w-5 h-5 rounded-full object-cover inline-block">`
+    : '';
+
   const card = `
     <div class="card rounded-lg p-4">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2 text-sm">
+          ${avatarHtml}
           <span class="font-medium text-primary">${escapeHtml(comment.username)}</span>
           <span class="text-muted">·</span>
           <span class="text-muted">${new Date(comment.created_at).toLocaleDateString('es-AR')}</span>
