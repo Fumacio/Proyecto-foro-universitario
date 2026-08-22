@@ -2,7 +2,12 @@ const pool = require('../db/connection');
 
 const getAll = async (req, res) => {
   try {
-    const { category_id } = req.query;
+    const { category_id, q, page = 1, limit = 20 } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+
+    let countQuery = 'SELECT COUNT(*) AS total FROM posts p';
     let query = `
       SELECT p.*, u.username, c.name AS category_name,
         (SELECT COALESCE(SUM(v.value), 0) FROM votes v WHERE v.post_id = p.id) AS vote_count,
@@ -12,16 +17,42 @@ const getAll = async (req, res) => {
       JOIN categories c ON p.category_id = c.id
     `;
     const params = [];
+    const countParams = [];
+    const conditions = [];
 
     if (category_id) {
-      query += ' WHERE p.category_id = ?';
+      conditions.push('p.category_id = ?');
       params.push(category_id);
+      countParams.push(category_id);
     }
 
-    query += ' ORDER BY p.created_at DESC';
+    if (q) {
+      conditions.push('(p.title LIKE ? OR p.content LIKE ?)');
+      const search = `%${q}%`;
+      params.push(search, search);
+      countParams.push(search, search);
+    }
+
+    if (conditions.length > 0) {
+      const where = ' WHERE ' + conditions.join(' AND ');
+      query += where;
+      countQuery += where;
+    }
+
+    query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limitNum, offset);
 
     const [rows] = await pool.query(query, params);
-    res.json(rows);
+    const [countResult] = await pool.query(countQuery, countParams);
+    const total = countResult[0].total;
+
+    res.json({
+      data: rows,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.ceil(total / limitNum)
+    });
   } catch {
     res.status(500).json({ error: 'Error al obtener posts' });
   }

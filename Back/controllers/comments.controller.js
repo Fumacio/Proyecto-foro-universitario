@@ -2,18 +2,36 @@ const pool = require('../db/connection');
 
 const getByPost = async (req, res) => {
   try {
+    const { page = 1, limit = 50 } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+
     const [rows] = await pool.query(
       `SELECT cm.*, u.username,
         (SELECT COALESCE(SUM(v.value), 0) FROM votes v WHERE v.comment_id = cm.id) AS vote_count
       FROM comments cm
       JOIN users u ON cm.user_id = u.id
       WHERE cm.post_id = ?
-      ORDER BY cm.created_at ASC`,
-      [req.params.postId]
+      ORDER BY cm.created_at ASC
+      LIMIT ? OFFSET ?`,
+      [req.params.postId, limitNum, offset]
     );
 
+    const [countResult] = await pool.query(
+      'SELECT COUNT(*) AS total FROM comments WHERE post_id = ?',
+      [req.params.postId]
+    );
+    const total = countResult[0].total;
+
     const nested = buildTree(rows, null);
-    res.json(nested);
+    res.json({
+      data: nested,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      pages: Math.ceil(total / limitNum)
+    });
   } catch {
     res.status(500).json({ error: 'Error al obtener comentarios' });
   }
