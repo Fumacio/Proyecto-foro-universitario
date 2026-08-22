@@ -74,4 +74,78 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { register, login };
+const updateProfile = async (req, res) => {
+  try {
+    const { username, email, current_password, new_password } = req.body;
+    const userId = req.user.id;
+
+    const [existing] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const user = existing[0];
+
+    if (new_password) {
+      if (!current_password) {
+        return res.status(400).json({ error: 'Debés ingresar tu contraseña actual para cambiarla' });
+      }
+      const valid = await bcrypt.compare(current_password, user.password_hash);
+      if (!valid) {
+        return res.status(401).json({ error: 'La contraseña actual es incorrecta' });
+      }
+    }
+
+    const fields = [];
+    const values = [];
+
+    if (username && username !== user.username) {
+      const [taken] = await pool.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, userId]);
+      if (taken.length > 0) {
+        return res.status(409).json({ error: 'El username ya está en uso' });
+      }
+      fields.push('username = ?');
+      values.push(username);
+    }
+
+    if (email && email !== user.email) {
+      const [taken] = await pool.query('SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
+      if (taken.length > 0) {
+        return res.status(409).json({ error: 'El email ya está en uso' });
+      }
+      fields.push('email = ?');
+      values.push(email);
+    }
+
+    if (new_password) {
+      const hash = await bcrypt.hash(new_password, 10);
+      fields.push('password_hash = ?');
+      values.push(hash);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' });
+    }
+
+    values.push(userId);
+    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+
+    const updated = await pool.query(
+      'SELECT u.id, u.username, u.email, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      [userId]
+    );
+
+    const updatedUser = updated[0];
+    const token = jwt.sign(
+      { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role } });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al actualizar perfil' });
+  }
+};
+
+module.exports = { register, login, updateProfile };

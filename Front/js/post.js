@@ -46,20 +46,33 @@ async function loadPost() {
       <div class="card rounded-lg p-6">
         <div class="flex items-start justify-between mb-4">
           <div>
-            <h1 class="text-2xl font-bold text-primary">${post.title}</h1>
+            <h1 class="text-2xl font-bold text-primary">${escapeHtml(post.title)}</h1>
             <div class="flex items-center gap-3 mt-2 text-sm text-secondary">
-              <span>por <a href="/profile.html?user_id=${post.user_id}" class="link-theme hover:underline">${post.username}</a></span>
+              <span>por <a href="/profile.html?user_id=${post.user_id}" class="link-theme hover:underline">${escapeHtml(post.username)}</a></span>
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
-              <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${post.category_name}</a>
+              <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>
             </div>
           </div>
           <div class="flex items-center gap-2">
             ${canEdit ? `
+              <button onclick="showEditPost()" class="text-sm link-theme hover:underline">Editar</button>
               <button onclick="deletePost()" class="text-sm" style="color: var(--red)">Eliminar</button>
             ` : ''}
           </div>
         </div>
-        <div class="text-secondary whitespace-pre-wrap">${post.content}</div>
+        <div class="text-secondary whitespace-pre-wrap">${escapeHtml(post.content)}</div>
+        <div id="edit-post-form" class="hidden mt-4">
+          <form onsubmit="submitEditPost(event)" class="space-y-3">
+            <input type="text" name="title" value="${escapeHtml(post.title)}" required
+                   class="w-full input-field rounded px-3 py-2 text-sm">
+            <textarea name="content" required rows="6"
+                      class="w-full input-field rounded px-3 py-2 text-sm">${escapeTextarea(post.content)}</textarea>
+            <div class="flex gap-2">
+              <button type="submit" class="btn-primary px-4 py-1.5 rounded text-sm">Guardar</button>
+              <button type="button" onclick="hideEditPost()" class="text-muted hover:text-secondary text-sm">Cancelar</button>
+            </div>
+          </form>
+        </div>
         <div class="flex items-center gap-3 mt-4 pt-4 border-t border-theme">
           <div class="vote-group">
             <button onclick="isLoggedIn() ? votePost(1) : showLoginPrompt('votar')" class="vote-btn vote-btn-up" title="Upvote">▲</button>
@@ -83,7 +96,8 @@ async function loadComments() {
   const container = document.getElementById('comments');
 
   try {
-    const comments = await api.get(`/posts/${postId}/comments`);
+    const result = await api.get(`/posts/${postId}/comments`);
+    const comments = result.data;
 
     if (comments.length === 0) {
       container.innerHTML = '<p class="text-muted text-sm">No hay comentarios todavía</p>';
@@ -96,7 +110,7 @@ async function loadComments() {
   }
 }
 
-function renderComment(comment, depth = 0) {
+function renderComment(comment) {
   const user = getUser();
   const canEdit = user && (user.id === comment.user_id || user.role === 'admin');
 
@@ -104,17 +118,27 @@ function renderComment(comment, depth = 0) {
     <div class="card rounded-lg p-4">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2 text-sm">
-          <span class="font-medium text-primary">${comment.username}</span>
+          <span class="font-medium text-primary">${escapeHtml(comment.username)}</span>
           <span class="text-muted">·</span>
           <span class="text-muted">${new Date(comment.created_at).toLocaleDateString('es-AR')}</span>
         </div>
         <div class="flex items-center gap-2">
           ${canEdit ? `
+            <button onclick="showEditComment(${comment.id})" class="text-xs link-theme hover:underline">Editar</button>
             <button onclick="deleteComment(${comment.id})" class="text-xs" style="color: var(--red)">Eliminar</button>
           ` : ''}
         </div>
       </div>
-      <p class="text-secondary text-sm whitespace-pre-wrap">${comment.content}</p>
+      <p id="comment-content-${comment.id}" class="text-secondary text-sm whitespace-pre-wrap">${escapeHtml(comment.content)}</p>
+      <div id="edit-comment-form-${comment.id}" class="hidden mt-2">
+        <form onsubmit="submitEditComment(event, ${comment.id})" class="space-y-2">
+          <textarea name="content" required rows="2" class="w-full input-field rounded px-2 py-1 text-sm">${escapeTextarea(comment.content)}</textarea>
+          <div class="flex gap-2">
+            <button type="submit" class="btn-primary px-3 py-1 rounded text-xs">Guardar</button>
+            <button type="button" onclick="hideEditComment(${comment.id})" class="text-muted text-xs">Cancelar</button>
+          </div>
+        </form>
+      </div>
       <div class="flex items-center gap-3 mt-2">
         <div class="vote-group">
           <button onclick="isLoggedIn() ? voteComment(${comment.id}, 1) : showLoginPrompt('votar')" class="vote-btn vote-btn-up">▲</button>
@@ -135,7 +159,7 @@ function renderComment(comment, depth = 0) {
     </div>
   `;
 
-  const replies = (comment.replies || []).map(r => renderComment(r, depth + 1)).join('');
+  const replies = (comment.replies || []).map(r => renderComment(r)).join('');
 
   if (replies) {
     return card + `<div class="ml-6 mt-2 space-y-3" style="border-left: 2px solid var(--border); padding-left: 12px;">${replies}</div>`;
@@ -204,6 +228,55 @@ async function deleteComment(commentId) {
     loadComments();
   } catch (err) {
     alert(err.error || 'Error al eliminar');
+  }
+}
+
+function showEditPost() {
+  document.getElementById('edit-post-form').classList.remove('hidden');
+  document.querySelector('#post-detail .text-secondary.whitespace-pre-wrap').classList.add('hidden');
+}
+
+function hideEditPost() {
+  document.getElementById('edit-post-form').classList.add('hidden');
+  document.querySelector('#post-detail .text-secondary.whitespace-pre-wrap').classList.remove('hidden');
+}
+
+async function submitEditPost(e) {
+  e.preventDefault();
+  const form = e.target;
+  const title = form.title.value.trim();
+  const content = form.content.value.trim();
+
+  try {
+    await api.put(`/posts/${postId}`, { title, content });
+    hideEditPost();
+    loadPost();
+  } catch (err) {
+    alert(err.error || 'Error al editar post');
+  }
+}
+
+function showEditComment(commentId) {
+  document.getElementById(`comment-content-${commentId}`).classList.add('hidden');
+  document.getElementById(`edit-comment-form-${commentId}`).classList.remove('hidden');
+}
+
+function hideEditComment(commentId) {
+  document.getElementById(`comment-content-${commentId}`).classList.remove('hidden');
+  document.getElementById(`edit-comment-form-${commentId}`).classList.add('hidden');
+}
+
+async function submitEditComment(e, commentId) {
+  e.preventDefault();
+  const form = e.target;
+  const content = form.content.value.trim();
+
+  try {
+    await api.put(`/posts/${postId}/comments/${commentId}`, { content });
+    hideEditComment(commentId);
+    loadComments();
+  } catch (err) {
+    alert(err.error || 'Error al editar comentario');
   }
 }
 

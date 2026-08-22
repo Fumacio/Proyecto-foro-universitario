@@ -1,4 +1,6 @@
 let categoryId = null;
+let currentPage = 1;
+const POSTS_PER_PAGE = 20;
 
 function getCategoryId() {
   const params = new URLSearchParams(window.location.search);
@@ -17,17 +19,18 @@ function hideNewPostForm() {
   document.getElementById('new-post-form').classList.add('hidden');
 }
 
-async function loadPosts() {
+async function loadPosts(page = 1) {
   categoryId = getCategoryId();
   if (!categoryId) {
     window.location.href = '/';
     return;
   }
 
+  currentPage = page;
   const container = document.getElementById('posts');
   const nameEl = document.getElementById('category-name');
   const newPostBtn = document.getElementById('new-post-btn');
-  newPostBtn.classList.remove('hidden');
+  if (isLoggedIn()) newPostBtn.classList.remove('hidden');
 
   try {
     const cat = await api.get(`/categories/${categoryId}`);
@@ -38,10 +41,12 @@ async function loadPosts() {
   }
 
   try {
-    const posts = await api.get(`/posts?category_id=${categoryId}`);
+    const result = await api.get(`/posts?category_id=${categoryId}&page=${page}&limit=${POSTS_PER_PAGE}`);
+    const posts = result.data;
 
-    if (posts.length === 0) {
+    if (posts.length === 0 && currentPage === 1) {
       container.innerHTML = '<p class="text-muted text-center py-8">No hay posts en esta categoría</p>';
+      document.getElementById('pagination').innerHTML = '';
       return;
     }
 
@@ -49,10 +54,10 @@ async function loadPosts() {
       <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
         <div class="flex items-start justify-between">
           <div class="flex-1">
-            <h3 class="font-semibold text-primary">${post.title}</h3>
-            <p class="text-secondary text-sm mt-1 line-clamp-2">${post.content.substring(0, 150)}${post.content.length > 150 ? '...' : ''}</p>
+            <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
+            <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
             <div class="flex items-center gap-4 mt-2 text-xs text-muted">
-              <span>por ${post.username}</span>
+              <span>por ${escapeHtml(post.username)}</span>
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
               <span>${post.comment_count} comentarios</span>
             </div>
@@ -67,9 +72,42 @@ async function loadPosts() {
         </div>
       </a>
     `).join('');
+
+    renderPagination(result.pages, result.page);
   } catch (err) {
     container.innerHTML = '<p style="color: var(--red)">Error al cargar posts</p>';
   }
+}
+
+function renderPagination(totalPages, activePage) {
+  const container = document.getElementById('pagination');
+  if (!container || totalPages <= 1) {
+    if (container) container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="flex items-center justify-center gap-2 mt-6">';
+
+  if (activePage > 1) {
+    html += `<button onclick="loadPosts(${activePage - 1})" class="btn-secondary px-3 py-1.5 rounded text-sm">← Anterior</button>`;
+  }
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === activePage) {
+      html += `<span class="btn-primary px-3 py-1.5 rounded text-sm cursor-default">${i}</span>`;
+    } else if (i === 1 || i === totalPages || Math.abs(i - activePage) <= 2) {
+      html += `<button onclick="loadPosts(${i})" class="btn-secondary px-3 py-1.5 rounded text-sm">${i}</button>`;
+    } else if (Math.abs(i - activePage) === 3) {
+      html += `<span class="text-muted px-1">...</span>`;
+    }
+  }
+
+  if (activePage < totalPages) {
+    html += `<button onclick="loadPosts(${activePage + 1})" class="btn-secondary px-3 py-1.5 rounded text-sm">Siguiente →</button>`;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 document.getElementById('create-post-form').addEventListener('submit', async (e) => {
@@ -84,7 +122,7 @@ document.getElementById('create-post-form').addEventListener('submit', async (e)
     });
     form.reset();
     hideNewPostForm();
-    loadPosts();
+    loadPosts(1);
   } catch (err) {
     alert(err.error || 'Error al crear post');
   }

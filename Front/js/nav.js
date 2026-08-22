@@ -3,11 +3,18 @@ function renderNav() {
   if (!nav) return;
 
   const user = getUser();
+  const params = new URLSearchParams(window.location.search);
+  const searchQuery = params.get('q') || '';
 
   let html = `
     <nav class="navbar">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
         <a href="/" class="text-xl font-bold" style="color: #ffffff">Foro UTN <span style="color: var(--orange)">&#9733;</span> FRT</a>
+        <form onsubmit="handleSearch(event)" class="flex-1 max-w-md mx-6">
+          <input type="text" id="search-input" placeholder="Buscar posts..."
+                 class="w-full input-field rounded px-3 py-1.5 text-sm"
+                 value="${escapeHtml(searchQuery)}">
+        </form>
         <div class="flex items-center gap-4">
   `;
 
@@ -26,6 +33,16 @@ function renderNav() {
 
   html += `</div></div></nav>`;
   nav.innerHTML = html;
+}
+
+function handleSearch(e) {
+  e.preventDefault();
+  const q = document.getElementById('search-input').value.trim();
+  if (q) {
+    window.location.href = `/?q=${encodeURIComponent(q)}`;
+  } else {
+    window.location.href = '/';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', renderNav);

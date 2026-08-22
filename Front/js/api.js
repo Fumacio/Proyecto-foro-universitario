@@ -65,3 +65,13 @@ function closeLoginPrompt() {
   const overlay = document.getElementById('login-prompt-overlay');
   if (overlay) overlay.remove();
 }
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeTextarea(str) {
+  return escapeHtml(str).replace(/\n/g, '&#10;');
+}
