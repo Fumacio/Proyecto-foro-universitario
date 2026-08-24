@@ -1,0 +1,41 @@
+- Lista de pendientes:
+
+1. Sistema de notificaciones
+- Notificar al usuario cuando alguien comenta en su post
+- Notificar cuando alguien responde a su comentario
+- Notificar cuando reciben votos
+2. Sistema de etiquetas/tags ✅ COMPLETADO
+- Permitir agregar etiquetas a los posts (ej: "duda", "tarea", "examen") ✅
+- Filtrar posts por etiquetas ✅
+3. Mejoras en el perfil de usuario
+- Mostrar estadísticas del usuario (posts creados, comentarios, karma)
+- Agregar biografía
+4. Moderación y reportes
+- Sistema de reportar posts/comentarios inapropiados
+- Panel de moderación para admins
+- Sistema de bans temporal/definitivo
+5. Búsqueda avanzada
+- Filtrar por fecha, autor, categoría
+6. Mejoras en comentarios
+- Mentiones @usuario en comentarios
+- Markdown en el contenido de posts y comentarios
+7. Admin panel (backend listo, falta frontend)
+- Dashboard con estadísticas
+- Gestión de usuarios (ver/editar/eliminar)
+- Gestión de categorías
+8. Autenticación mejorada
+- Recuperar contraseña por email
+- Verificar email
+- Login con Google/GitHub (OAuth)
+
+✅ COMPLETADO:
+- Sistema de etiquetas/tags con filtrado
+- Avatar/foto de perfil
+- Editar/eliminar comentarios (backend y frontend)
+- Ordenar por más votados, más recientes
+- Búsqueda por título/contenido con paginación
+- Email oculto en perfiles ajenos (solo visible para el propio usuario o admin)
+- Campos extendidos en registro: nombre, apellido, edad, comisión, carrera, género
+- Fix: vote_count ahora retorna number en vez de string
+- Fix: updateProfile retornaba usuario vacío
+- Fix: conflicto de rutas upload-image

@@ -46,7 +46,13 @@ function initRegisterForm() {
       const data = await api.post('/auth/register', {
         username: form.username.value.trim(),
         email: form.email.value.trim(),
-        password: form.password.value
+        password: form.password.value,
+        first_name: form.first_name.value.trim() || null,
+        last_name: form.last_name.value.trim() || null,
+        age: form.age.value ? Number(form.age.value) : null,
+        commission: form.commission.value.trim() || null,
+        career: form.career.value || null,
+        gender: form.gender.value || null
       });
       handleAuthSuccess(data);
     } catch (err) {

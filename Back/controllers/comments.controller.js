@@ -9,7 +9,7 @@ const getByPost = async (req, res) => {
 
     const [rows] = await pool.query(
       `SELECT cm.*, u.username, u.avatar_url,
-        (SELECT COALESCE(SUM(v.value), 0) FROM votes v WHERE v.comment_id = cm.id) AS vote_count
+        (SELECT CAST(COALESCE(SUM(v.value), 0) AS SIGNED) FROM votes v WHERE v.comment_id = cm.id) AS vote_count
       FROM comments cm
       JOIN users u ON cm.user_id = u.id
       WHERE cm.post_id = ?

@@ -10,10 +10,10 @@
 <body class="min-h-screen">
   <div id="navbar"></div>
 
-  <div class="max-w-4xl mx-auto px-4 py-8">
+  <div class="max-w-6xl mx-auto px-4 py-8">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <a href="/" class="link-theme hover:underline text-sm">← Volver al inicio</a>
+        <a href="javascript:history.back()" class="link-theme hover:underline text-sm">← Volver</a>
         <h1 id="category-name" class="text-2xl font-bold text-primary mt-2">Cargando...</h1>
       </div>
       <button id="new-post-btn" onclick="showNewPostForm()" class="hidden btn-primary px-4 py-2 rounded text-sm">
@@ -29,6 +29,10 @@
         <textarea name="content" placeholder="Contenido del post..." required rows="4"
                   class="w-full input-field rounded px-3 py-2 text-sm"></textarea>
         <div>
+          <label class="text-secondary text-xs mb-1 block">Etiquetas</label>
+          <div id="tag-selector" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div>
           <label class="text-secondary text-xs mb-1 block">Imagen (opcional)</label>
           <input type="file" accept="image/*" onchange="uploadPostImage(event)"
                  class="w-full text-sm text-secondary file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-[#333] file:text-[#f0f0f0] hover:file:bg-[#444]">
@@ -41,11 +45,37 @@
       </form>
     </div>
 
-    <div id="posts" class="space-y-3">
-      <p class="text-muted">Cargando posts...</p>
-    </div>
+    <div class="flex gap-6">
+      <aside class="w-64 flex-shrink-0 hidden lg:block">
+        <div class="card rounded-lg p-4 sticky top-4">
+          <h3 class="text-sm font-semibold text-primary mb-3">Ordenar por</h3>
+          <select id="sort-select" onchange="handleSortChange()" class="w-full input-field rounded px-3 py-2 text-sm">
+            <option value="recent">Más recientes</option>
+            <option value="votes">Más votados</option>
+          </select>
 
-    <div id="pagination"></div>
+          <div class="border-t border-theme my-4"></div>
+
+          <h3 class="text-sm font-semibold text-primary mb-3">Etiquetas</h3>
+          <div id="sidebar-tags" class="space-y-2"></div>
+        </div>
+      </aside>
+
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3 mb-4 lg:hidden">
+          <select id="sort-select-mobile" onchange="handleSortChange()" class="input-field rounded px-3 py-2 text-sm">
+            <option value="recent">Más recientes</option>
+            <option value="votes">Más votados</option>
+          </select>
+        </div>
+
+        <div id="posts" class="space-y-3">
+          <p class="text-muted">Cargando posts...</p>
+        </div>
+
+        <div id="pagination"></div>
+      </div>
+    </div>
   </div>
 
   <script src="/js/api.js"></script>

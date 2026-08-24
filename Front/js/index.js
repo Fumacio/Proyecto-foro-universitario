@@ -1,3 +1,5 @@
+const SEARCH_LIMIT = 20;
+
 async function loadCategories() {
   const container = document.getElementById('categories');
   const params = new URLSearchParams(window.location.search);
@@ -7,7 +9,6 @@ async function loadCategories() {
     document.getElementById('search-title').textContent = `Resultados para "${query}"`;
     document.getElementById('search-title').classList.remove('hidden');
     document.getElementById('browse-title').classList.add('hidden');
-    document.getElementById('search-subtitle').classList.remove('hidden');
     document.getElementById('browse-subtitle').classList.add('hidden');
     container.className = 'space-y-3';
     await searchPosts(query);
@@ -16,7 +17,6 @@ async function loadCategories() {
 
   document.getElementById('search-title').classList.add('hidden');
   document.getElementById('browse-title').classList.remove('hidden');
-  document.getElementById('search-subtitle').classList.add('hidden');
   document.getElementById('browse-subtitle').classList.remove('hidden');
   container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
 
@@ -52,7 +52,7 @@ async function searchPosts(query, page = 1) {
   const container = document.getElementById('categories');
 
   try {
-    const result = await api.get(`/posts?q=${encodeURIComponent(query)}&page=${page}&limit=20`);
+    const result = await api.get(`/posts?q=${encodeURIComponent(query)}&page=${page}&limit=${SEARCH_LIMIT}`);
     const posts = result.data;
 
     if (posts.length === 0) {
@@ -63,14 +63,21 @@ async function searchPosts(query, page = 1) {
 
     container.innerHTML = posts.map(post => `
       <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div class="flex items-start justify-between">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 mt-1">
+            ${post.avatar_url
+              ? `<img src="${post.avatar_url}" alt="" class="w-9 h-9 rounded-full object-cover">`
+              : `<div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold" style="background-color: var(--orange-light); color: var(--orange)">${escapeHtml(post.username.charAt(0).toUpperCase())}</div>`
+            }
+          </div>
           <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
-            <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
+            <h3 class="font-semibold text-primary mb-1">${escapeHtml(post.title)}</h3>
+            <p class="text-secondary text-sm line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
             <div class="flex items-center gap-4 mt-2 text-xs text-muted">
               <span>por ${escapeHtml(post.username)}</span>
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
               <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>
+              ${post.tags && post.tags.length > 0 ? `<span class="flex items-center gap-1">${post.tags.map(t => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${t.color}15; color: ${t.color}">${escapeHtml(t.name)}</span>`).join('')}</span>` : ''}
             </div>
           </div>
           <div class="text-right ml-4 flex-shrink-0">

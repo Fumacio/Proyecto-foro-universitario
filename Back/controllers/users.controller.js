@@ -3,7 +3,7 @@ const pool = require('../db/connection');
 const getAll = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
+      'SELECT u.id, u.username, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
     );
     res.json(rows);
   } catch {
@@ -14,7 +14,7 @@ const getAll = async (req, res) => {
 const getById = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [req.params.id]
     );
 
@@ -22,7 +22,15 @@ const getById = async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    res.json(rows[0]);
+    const user = rows[0];
+    const isOwn = req.user && req.user.id === user.id;
+    const isAdmin = req.user && req.user.role === 'admin';
+
+    if (!isOwn && !isAdmin) {
+      delete user.email;
+    }
+
+    res.json(user);
   } catch {
     res.status(500).json({ error: 'Error al obtener usuario' });
   }

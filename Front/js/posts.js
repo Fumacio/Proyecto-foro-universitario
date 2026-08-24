@@ -2,10 +2,16 @@ let categoryId = null;
 let currentPage = 1;
 const POSTS_PER_PAGE = 20;
 let pendingImageUrl = null;
+let activeTagId = null;
 
 function getCategoryId() {
   const params = new URLSearchParams(window.location.search);
   return params.get('category_id');
+}
+
+function getSort() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('sort') || 'recent';
 }
 
 function showNewPostForm() {
@@ -14,24 +20,98 @@ function showNewPostForm() {
     return;
   }
   document.getElementById('new-post-form').classList.remove('hidden');
+  loadTags();
 }
 
 function hideNewPostForm() {
   document.getElementById('new-post-form').classList.add('hidden');
 }
 
+async function loadTags() {
+  try {
+    const tags = await api.get('/tags');
+    const container = document.getElementById('tag-selector');
+    if (container) {
+      container.innerHTML = tags.map(t =>
+        `<label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+          <input type="checkbox" name="tag_ids" value="${t.id}" class="hidden peer">
+          <span class="rounded-full px-2 py-0.5 transition-all"
+                style="background-color: ${t.color}22; color: ${t.color}; border: 1px solid ${t.color}44"
+                onclick="this.previousElementSibling.checked ? this.style.boxShadow='0 0 0 2px ${t.color}' : this.style.boxShadow=''">${escapeHtml(t.name)}</span>
+        </label>`
+      ).join('');
+    }
+  } catch {}
+}
+
+async function loadSidebarTags() {
+  const container = document.getElementById('sidebar-tags');
+  try {
+    const tags = await api.get('/tags');
+    const params = new URLSearchParams(window.location.search);
+
+    container.innerHTML = `
+      <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary transition-colors">
+        <input type="radio" name="tag-filter" value="" ${!activeTagId ? 'checked' : ''} onchange="filterByTag(null)" class="accent-[var(--orange)]">
+        Todos
+      </label>
+      ${tags.map(t => `
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary transition-colors">
+            <input type="radio" name="tag-filter" value="${t.id}" ${String(t.id) === String(activeTagId) ? 'checked' : ''} onchange="filterByTag(${t.id})" class="accent-[var(--orange)]">
+            ${escapeHtml(t.name.charAt(0).toUpperCase() + t.name.slice(1))}
+          </label>
+      `).join('')}
+    `;
+  } catch {}
+}
+
+function filterByTag(tagId) {
+  activeTagId = tagId;
+  const params = new URLSearchParams(window.location.search);
+  if (tagId) {
+    params.set('tag_id', tagId);
+  } else {
+    params.delete('tag_id');
+  }
+  params.delete('page');
+  window.location.search = params.toString();
+}
+
+function handleSortChange() {
+  const select = document.getElementById('sort-select');
+  const selectMobile = document.getElementById('sort-select-mobile');
+  const sort = (select && select.value) || (selectMobile && selectMobile.value) || 'recent';
+  const params = new URLSearchParams(window.location.search);
+  if (sort === 'recent') {
+    params.delete('sort');
+  } else {
+    params.set('sort', sort);
+  }
+  params.delete('page');
+  window.location.search = params.toString();
+}
+
 async function loadPosts(page = 1) {
   categoryId = getCategoryId();
   if (!categoryId) {
-    window.location.href = '/';
+    document.getElementById('posts').innerHTML = '<p class="text-muted text-center py-8">Seleccioná una categoría</p>';
     return;
   }
+
+  const params = new URLSearchParams(window.location.search);
+  activeTagId = params.get('tag_id');
+  const sort = getSort();
 
   currentPage = page;
   const container = document.getElementById('posts');
   const nameEl = document.getElementById('category-name');
   const newPostBtn = document.getElementById('new-post-btn');
   if (isLoggedIn()) newPostBtn.classList.remove('hidden');
+
+  const sortSelect = document.getElementById('sort-select');
+  const sortSelectMobile = document.getElementById('sort-select-mobile');
+  if (sortSelect) sortSelect.value = sort;
+  if (sortSelectMobile) sortSelectMobile.value = sort;
 
   try {
     const cat = await api.get(`/categories/${categoryId}`);
@@ -41,8 +121,17 @@ async function loadPosts(page = 1) {
     nameEl.textContent = 'Categoría';
   }
 
+  await loadSidebarTags();
+
   try {
-    const result = await api.get(`/posts?category_id=${categoryId}&page=${page}&limit=${POSTS_PER_PAGE}`);
+    const queryParams = new URLSearchParams();
+    queryParams.set('category_id', categoryId);
+    queryParams.set('page', page);
+    queryParams.set('limit', POSTS_PER_PAGE);
+    if (activeTagId) queryParams.set('tag_id', activeTagId);
+    if (sort !== 'recent') queryParams.set('sort', sort);
+
+    const result = await api.get(`/posts?${queryParams.toString()}`);
     const posts = result.data;
 
     if (posts.length === 0 && currentPage === 1) {
@@ -53,18 +142,24 @@ async function loadPosts(page = 1) {
 
     container.innerHTML = posts.map(post => `
       <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            ${post.image_url ? `<img src="${post.image_url}" alt="" class="w-full rounded mb-2 max-h-32 object-cover" onerror="this.remove()">` : ''}
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 mt-1">
+            ${post.avatar_url
+              ? `<img src="${post.avatar_url}" alt="" class="w-9 h-9 rounded-full object-cover">`
+              : `<div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold" style="background-color: var(--orange-light); color: var(--orange)">${escapeHtml(post.username.charAt(0).toUpperCase())}</div>`
+            }
+          </div>
+          <div class="flex-1 min-w-0">
             <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
             <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
             <div class="flex items-center gap-4 mt-2 text-xs text-muted">
               <span>por ${escapeHtml(post.username)}</span>
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
               <span>${post.comment_count} comentarios</span>
+              ${post.tags && post.tags.length > 0 ? `<span class="flex items-center gap-1">${post.tags.map(t => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${t.color}15; color: ${t.color}">${escapeHtml(t.name)}</span>`).join('')}</span>` : ''}
             </div>
           </div>
-          <div class="text-right ml-4">
+          <div class="text-right ml-4 flex-shrink-0">
             <div class="vote-group">
               <span class="vote-btn" style="color: var(--green); font-size: 10px;">▲</span>
               <span class="vote-count ${post.vote_count > 0 ? 'vote-positive' : post.vote_count < 0 ? 'vote-negative' : 'vote-neutral'}">${post.vote_count}</span>
@@ -116,16 +211,23 @@ document.getElementById('create-post-form').addEventListener('submit', async (e)
   e.preventDefault();
   const form = e.target;
 
+  const selectedTags = Array.from(form.querySelectorAll('input[name="tag_ids"]:checked')).map(cb => Number(cb.value));
+
   try {
     await api.post('/posts', {
       title: form.title.value.trim(),
       content: form.content.value.trim(),
       category_id: Number(categoryId),
-      image_url: pendingImageUrl
+      image_url: pendingImageUrl,
+      tag_ids: selectedTags
     });
     form.reset();
     pendingImageUrl = null;
     document.getElementById('image-preview').innerHTML = '';
+    document.querySelectorAll('#tag-selector input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+      cb.nextElementSibling.style.boxShadow = '';
+    });
     hideNewPostForm();
     loadPosts(1);
   } catch (err) {
@@ -164,3 +266,7 @@ async function uploadPostImage(e) {
 }
 
 loadPosts();
+
+window.addEventListener('popstate', () => {
+  loadPosts();
+});

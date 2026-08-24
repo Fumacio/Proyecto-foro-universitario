@@ -4,7 +4,7 @@ const pool = require('../db/connection');
 
 const register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, first_name, last_name, age, commission, career, gender } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
@@ -22,18 +22,17 @@ const register = async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
 
     const [result] = await pool.query(
-      'INSERT INTO users (username, email, password_hash, role_id) VALUES (?, ?, ?, 3)',
-      [username, email, hash]
+      'INSERT INTO users (username, email, password_hash, role_id, first_name, last_name, age, commission, career, gender) VALUES (?, ?, ?, 3, ?, ?, ?, ?, ?, ?)',
+      [username, email, hash, first_name || null, last_name || null, age || null, commission || null, career || null, gender || null]
     );
 
     const token = jwt.sign(
       { id: result.insertId, username, role: 'alumno' },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      process.env.JWT_SECRET
     );
 
-    res.status(201).json({ token, user: { id: result.insertId, username, email, role: 'alumno' } });
-  } catch (err) {
+    res.status(201).json({ token, user: { id: result.insertId, username, email, role: 'alumno', first_name, last_name, age, commission, career, gender } });
+  } catch {
     res.status(500).json({ error: 'Error al registrar usuario' });
   }
 };
@@ -64,19 +63,18 @@ const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      process.env.JWT_SECRET
     );
 
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url } });
-  } catch (err) {
+    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url, first_name: user.first_name, last_name: user.last_name, age: user.age, commission: user.commission, career: user.career, gender: user.gender } });
+  } catch {
     res.status(500).json({ error: 'Error al iniciar sesión' });
   }
 };
 
 const updateProfile = async (req, res) => {
   try {
-    const { username, email, current_password, new_password } = req.body;
+    const { username, email, current_password, new_password, first_name, last_name, age, commission, career, gender } = req.body;
     const userId = req.user.id;
 
     const [existing] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]);
@@ -123,6 +121,14 @@ const updateProfile = async (req, res) => {
       values.push(hash);
     }
 
+    const profileFields = ['first_name', 'last_name', 'age', 'commission', 'career', 'gender'];
+    for (const field of profileFields) {
+      if (req.body[field] !== undefined) {
+        fields.push(`${field} = ?`);
+        values.push(req.body[field] || null);
+      }
+    }
+
     if (fields.length === 0) {
       return res.status(400).json({ error: 'No hay campos para actualizar' });
     }
@@ -130,20 +136,19 @@ const updateProfile = async (req, res) => {
     values.push(userId);
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
 
-    const updated = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+    const [updated] = await pool.query(
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [userId]
     );
 
     const updatedUser = updated[0];
     const token = jwt.sign(
       { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      process.env.JWT_SECRET
     );
 
-    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url } });
-  } catch (err) {
+    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url, first_name: updatedUser.first_name, last_name: updatedUser.last_name, age: updatedUser.age, commission: updatedUser.commission, career: updatedUser.career, gender: updatedUser.gender } });
+  } catch {
     res.status(500).json({ error: 'Error al actualizar perfil' });
   }
 };

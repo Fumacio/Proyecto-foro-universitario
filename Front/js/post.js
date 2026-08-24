@@ -1,6 +1,13 @@
 let postId = null;
 let commentsLoaded = false;
 
+function renderTagsHtml(tags) {
+  if (!tags || tags.length === 0) return '';
+  return tags.map(t =>
+    `<span class="inline-block text-xs px-2 py-0.5 rounded-full" style="background-color: ${t.color}22; color: ${t.color}; border: 1px solid ${t.color}44">${escapeHtml(t.name)}</span>`
+  ).join(' ');
+}
+
 function getPostId() {
   const params = new URLSearchParams(window.location.search);
   return params.get('id');
@@ -56,6 +63,7 @@ async function loadPost() {
               <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
               <a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>
             </div>
+            ${post.tags && post.tags.length > 0 ? `<div class="flex items-center gap-1.5 mt-2 flex-wrap">${renderTagsHtml(post.tags)}</div>` : ''}
           </div>
           <div class="flex items-center gap-2">
             ${canEdit ? `

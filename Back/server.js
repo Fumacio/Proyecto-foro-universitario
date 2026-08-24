@@ -9,6 +9,7 @@ const categoriesRoutes = require('./routes/categories.routes');
 const postsRoutes = require('./routes/posts.routes');
 const commentsRoutes = require('./routes/comments.routes');
 const votesRoutes = require('./routes/votes.routes');
+const tagsRoutes = require('./routes/tags.routes');
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use('/api/categories', categoriesRoutes);
 app.use('/api/posts', postsRoutes);
 app.use('/api/posts/:postId/comments', commentsRoutes);
 app.use('/api', votesRoutes);
+app.use('/api/tags', tagsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

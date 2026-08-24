@@ -2,15 +2,21 @@ CREATE DATABASE IF NOT EXISTS foro_universitario;
 USE foro_universitario;
 
 -- Roles
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE
 ) ENGINE=InnoDB;
 
 -- Usuarios
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(100) NOT NULL UNIQUE,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  age INT,
+  commission VARCHAR(50),
+  career VARCHAR(150),
+  gender VARCHAR(50),
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   avatar_url VARCHAR(500),
@@ -21,7 +27,7 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
 
 -- Categorías (jerárquicas)
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
   description TEXT,
@@ -31,7 +37,7 @@ CREATE TABLE categories (
 ) ENGINE=InnoDB;
 
 -- Posts
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   category_id INT NOT NULL,
@@ -47,7 +53,7 @@ CREATE TABLE posts (
 ) ENGINE=InnoDB;
 
 -- Comentarios (con replies anidadas)
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   post_id INT NOT NULL,
   user_id INT NOT NULL,
@@ -62,7 +68,7 @@ CREATE TABLE comments (
 ) ENGINE=InnoDB;
 
 -- Votos (posts y comentarios)
-CREATE TABLE votes (
+CREATE TABLE IF NOT EXISTS votes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   post_id INT,
@@ -75,4 +81,20 @@ CREATE TABLE votes (
   UNIQUE KEY uk_vote_post (post_id, user_id),
   UNIQUE KEY uk_vote_comment (comment_id, user_id),
   CHECK ((post_id IS NOT NULL AND comment_id IS NULL) OR (post_id IS NULL AND comment_id IS NOT NULL))
+) ENGINE=InnoDB;
+
+-- Tags
+CREATE TABLE IF NOT EXISTS tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(50) NOT NULL UNIQUE,
+  color VARCHAR(7) DEFAULT '#F99B4A'
+) ENGINE=InnoDB;
+
+-- Relación posts-tags
+CREATE TABLE IF NOT EXISTS post_tags (
+  post_id INT NOT NULL,
+  tag_id INT NOT NULL,
+  PRIMARY KEY (post_id, tag_id),
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

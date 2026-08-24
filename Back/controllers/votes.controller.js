@@ -81,7 +81,7 @@ async function getPostVoteCount(postId) {
     'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE post_id = ?',
     [postId]
   );
-  return rows[0].total;
+  return Number(rows[0].total);
 }
 
 async function getCommentVoteCount(commentId) {
@@ -89,7 +89,7 @@ async function getCommentVoteCount(commentId) {
     'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE comment_id = ?',
     [commentId]
   );
-  return rows[0].total;
+  return Number(rows[0].total);
 }
 
 module.exports = { votePost, voteComment };

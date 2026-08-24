@@ -16,19 +16,67 @@
 
       <form id="register-form" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-secondary mb-1">Nombre de usuario</label>
+          <label class="block text-sm font-medium text-secondary mb-1">Nombre de usuario *</label>
           <input type="text" name="username" required
                  class="w-full input-field rounded px-3 py-2">
         </div>
         <div>
-          <label class="block text-sm font-medium text-secondary mb-1">Email</label>
+          <label class="block text-sm font-medium text-secondary mb-1">Email *</label>
           <input type="email" name="email" required
                  class="w-full input-field rounded px-3 py-2">
         </div>
         <div>
-          <label class="block text-sm font-medium text-secondary mb-1">Contraseña</label>
+          <label class="block text-sm font-medium text-secondary mb-1">Contraseña *</label>
           <input type="password" name="password" required minlength="6"
                  class="w-full input-field rounded px-3 py-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-secondary mb-1">Nombre</label>
+            <input type="text" name="first_name"
+                   class="w-full input-field rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-secondary mb-1">Apellido</label>
+            <input type="text" name="last_name"
+                   class="w-full input-field rounded px-3 py-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-secondary mb-1">Edad</label>
+            <input type="number" name="age" min="14" max="99"
+                   class="w-full input-field rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-secondary mb-1">Comisión</label>
+            <input type="text" name="commission" placeholder="Ej: 1A, 2B"
+                   class="w-full input-field rounded px-3 py-2">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-secondary mb-1">Carrera</label>
+          <select name="career" class="w-full input-field rounded px-3 py-2">
+            <option value="">Seleccionar carrera</option>
+            <option value="Ingenieria en Sistemas">Ingeniería en Sistemas</option>
+            <option value="Ingenieria Civil">Ingeniería Civil</option>
+            <option value="Ingenieria Electrica">Ingeniería Eléctrica</option>
+            <option value="Ingenieria Mecanica">Ingeniería Mecánica</option>
+            <option value="Ingenieria Quimica">Ingeniería Química</option>
+            <option value="Licenciatura en Administracion">Licenciatura en Administración</option>
+            <option value="Contador Publico">Contador Público</option>
+            <option value="Otra">Otra</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-secondary mb-1">Género</label>
+          <select name="gender" class="w-full input-field rounded px-3 py-2">
+            <option value="">Prefiero no decir</option>
+            <option value="Masculino">Masculino</option>
+            <option value="Femenino">Femenino</option>
+            <option value="No binario">No binario</option>
+            <option value="Otro">Otro</option>
+          </select>
         </div>
         <button type="submit" class="w-full btn-primary py-2 rounded font-medium">
           Crear cuenta
