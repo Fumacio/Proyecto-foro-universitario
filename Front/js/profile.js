@@ -20,6 +20,11 @@ async function loadProfile() {
     const data = await api.get(`/users/${userId}`);
     const stats = await api.get(`/users/${userId}/stats`);
 
+    let activity = null;
+    if (isOwn) {
+      activity = await api.get(`/users/${userId}/activity`);
+    }
+
     const avatarHtml = data.avatar_url
       ? `<img src="${data.avatar_url}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
       : `<div class="w-16 h-16 rounded-full flex items-center justify-center" style="background-color: var(--orange-light)">
@@ -109,6 +114,43 @@ async function loadProfile() {
         ` : ''}
       </div>
 
+      ${activity && (activity.posts.length > 0 || activity.comments.length > 0) ? `
+        <div class="card rounded-lg p-6 mt-4">
+          <h2 class="text-lg font-semibold text-primary mb-4">Actividad reciente</h2>
+
+          ${activity.posts.length > 0 ? `
+            <div class="mb-4">
+              <h3 class="text-sm font-medium text-secondary mb-2">Últimos posts</h3>
+              <div class="space-y-2">
+                ${activity.posts.map(p => `
+                  <a href="/post.html?id=${p.id}" class="block text-sm border-b border-theme pb-2 hover:opacity-80 transition-opacity">
+                    <span class="text-primary link-theme">${escapeHtml(p.title)}</span>
+                    <span class="text-muted ml-2">en ${escapeHtml(p.category_name)}</span>
+                    <span class="text-muted ml-2">· ${new Date(p.created_at).toLocaleDateString('es-AR')}</span>
+                  </a>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${activity.comments.length > 0 ? `
+            <div>
+              <h3 class="text-sm font-medium text-secondary mb-2">Últimos comentarios</h3>
+              <div class="space-y-2">
+                ${activity.comments.map(c => `
+                  <a href="/post.html?id=${c.post_id}" class="block text-sm border-b border-theme pb-2 hover:opacity-80 transition-opacity">
+                    <span class="text-muted">Comentó en</span>
+                    <span class="text-primary link-theme ml-1">${escapeHtml(c.post_title)}</span>
+                    <span class="text-muted ml-2">· ${new Date(c.created_at).toLocaleDateString('es-AR')}</span>
+                    <p class="text-secondary text-xs mt-1 line-clamp-1">${escapeHtml(c.content)}</p>
+                  </a>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+
       ${isOwn ? `
         <div id="edit-profile-form" class="hidden card rounded-lg p-6 mt-4">
           <h2 class="text-lg font-semibold text-primary mb-4">Editar perfil</h2>
@@ -191,6 +233,28 @@ async function loadProfile() {
             </div>
           </form>
         </div>
+
+        <div class="card rounded-lg p-6 mt-4" style="border: 1px solid var(--red)">
+          <h2 class="text-lg font-semibold mb-2" style="color: var(--red)">Zona de peligro</h2>
+          <p class="text-secondary text-sm mb-4">Eliminar tu cuenta es permanente y no se puede deshacer.</p>
+          <button onclick="showDeleteAccount()" class="px-4 py-2 rounded text-sm font-medium" style="background-color: var(--red-light); color: var(--red)">Eliminar mi cuenta</button>
+        </div>
+
+        <div id="delete-account-form" class="hidden card rounded-lg p-6 mt-4" style="border: 1px solid var(--red)">
+          <h2 class="text-lg font-semibold mb-2" style="color: var(--red)">Confirmar eliminación</h2>
+          <p class="text-secondary text-sm mb-4">Ingresá tu contraseña para confirmar que querés eliminar tu cuenta permanentemente.</p>
+          <form onsubmit="submitDeleteAccount(event)" class="space-y-3">
+            <div>
+              <label class="text-secondary text-xs mb-1 block">Contraseña</label>
+              <input type="password" name="password" required
+                     class="w-full input-field rounded px-3 py-2 text-sm">
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="px-4 py-1.5 rounded text-sm font-medium" style="background-color: var(--red); color: white">Eliminar cuenta</button>
+              <button type="button" onclick="hideDeleteAccount()" class="text-muted hover:text-secondary text-sm">Cancelar</button>
+            </div>
+          </form>
+        </div>
       ` : ''}
     `;
   } catch {
@@ -204,6 +268,14 @@ function showEditProfile() {
 
 function hideEditProfile() {
   document.getElementById('edit-profile-form').classList.add('hidden');
+}
+
+function showDeleteAccount() {
+  document.getElementById('delete-account-form').classList.remove('hidden');
+}
+
+function hideDeleteAccount() {
+  document.getElementById('delete-account-form').classList.add('hidden');
 }
 
 async function submitEditProfile(e) {
@@ -235,6 +307,23 @@ async function submitEditProfile(e) {
     loadProfile();
   } catch (err) {
     alert(err.error || 'Error al actualizar perfil');
+  }
+}
+
+async function submitDeleteAccount(e) {
+  e.preventDefault();
+  const form = e.target;
+  const password = form.password.value;
+
+  if (!confirm('¿Estás completamente seguro? Esta acción elimina tu cuenta permanentemente.')) return;
+
+  try {
+    await api.delete('/auth/account', { body: JSON.stringify({ password }) });
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/';
+  } catch (err) {
+    alert(err.error || 'Error al eliminar la cuenta');
   }
 }
 

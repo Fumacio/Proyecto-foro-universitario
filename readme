@@ -21,42 +21,99 @@
 - Usar librería frontend (marked o markdown-it vía CDN)
 - No requiere cambios en backend
 
-## 5. Recuperación de contraseña (Prioridad BAJA)
-- Recuperar contraseña por email
-- Configurar servicio SMTP (SendGrid, Mailgun, etc.)
-- Templates de email
-
-## 6. Verificación de email (Prioridad BAJA)
+## 5. Verificación de email (Prioridad BAJA)
 - Verificar email al registrarse
 - Token de verificación por email
 - Desbloquear funcionalidades solo con email verificado
 
-## 7. OAuth login (Prioridad BAJA)
+## 6. OAuth login (Prioridad BAJA)
 - Login con Google/GitHub
 - Flujo OAuth completo
 - Manejo de cuentas vinculadas
 
-## 8. Moderación y reportos (Prioridad BAJA)
-- Sistema de reportar posts/comentarios inapropiados
-- Panel de moderación para admins
-- Sistema de bans temporal/definitivo
+---
+
+## 7. Seguridad y Deployment (Prioridad ALTA)
+
+### Críticos (arreglar ahora)
+- JWT sin expiración — tokens válidos para siempre, agregar `expiresIn: '2h'` y refresh tokens
+- CORS wildcard — `cors()` sin opciones permite cualquier sitio, restringir a `FRONTEND_URL`
+- Sin rate limiting — brute-force ilimitado en login/registro/forgot-password, instalar `express-rate-limit`
+- JWT secret predecible — `foro_universitario_secret_key_2026` es adivinable, generar 64 bytes hex
+
+### Altos (arreglar pronto)
+- Sin Helmet — no hay headers de seguridad (X-Frame-Options, HSTS, CSP), instalar `helmet`
+- Sin validación de inputs — no se valida formato email, largo password, role_id válido
+- Password débil en registro — no hay mínimo de caracteres (sí en reset)
+- DB con usuario root y pass 12345 — crear usuario dedicado con permisos solo en foro_universitario
+- Sin `.env.example` — nadie sabe qué variables necesita para deploy
+- `start` y `dev` son iguales — no hay hot-reload, instalar nodemon para dev
+- Todos los `catch` borran el error — 45 catchs sin parámetro, imposible debuggear
+
+### Medios
+- Sin logging estructurado — solo `console.log`, instalar winston/pino + morgan
+- Sin middleware de error global — errores no capturados exponen stack traces
+- Uploads no verifican contenido real — solo MIME type, no contenido binario
+- Admin puede setear role_id inválido — sin validación contra tabla roles
+- Sin compresión gzip — instalar `compression`
+- Sin cache headers en archivos estáticos
+
+### Bajos
+- Sin README.md con instrucciones de setup
+- Dependencia `crypto` innecesaria (es built-in de Node)
+- Archivo `nul` accidental en la raíz del proyecto
 
 ---
 
 ✅ COMPLETADO:
-- Sistema de etiquetas/tags con filtrado
-- Avatar/foto de perfil
-- Editar/eliminar comentarios (backend y frontend)
-- Ordenar por más votados, más recientes
+
+### Autenticación
+- Sistema de registro y login con JWT
+- Recuperación de contraseña por email (forgot-password / reset-password)
+- Token de reset expira en 1 hora, se invalida al usarlo
+- Eliminar cuenta propia (requiere contraseña, admin no puede)
+- Email dedicado para envíos automáticos (foro.utn.frt.noreply@gmail.com via Gmail SMTP)
+- Fix: vote_count ahora retorna number en vez de string
+- Fix: updateProfile retornaba usuario vacío
+- Fix: conflicto de rutas upload-image
+- Fix: conflicto de IDs entre navbar search y posts search
+
+### Búsqueda
 - Búsqueda por título/contenido con paginación
 - Búsqueda con caracteres especiales (áéíóú ñ) funciona correctamente
 - Botón de limpiar búsqueda
 - Buscador solo dentro de categorías (removido del navbar)
-- Fix: conflicto de IDs entre navbar search y posts search
-- Email oculto en perfiles ajenos (solo visible para el propio usuario o admin)
-- Campos extendidos en registro: nombre, apellido, edad, comisión, carrera, género
-- Fix: vote_count ahora retorna number en vez de string
-- Fix: updateProfile retornaba usuario vacío
-- Fix: conflicto de rutas upload-image
-- Mejoras en perfil de usuario: estadísticas (posts, comentarios, karma) y biografía
-- Admin panel completo: dashboard con estadísticas, gestión de usuarios (rol/eliminar), gestión de categorías (crear/eliminar), gestión de tags (crear/eliminar con color)
+
+### Moderación y seguridad
+- Sistema de reportes (spam, abuso, contenido inapropiado, off-topic, otro)
+- Botón reportar en posts y comentarios (requiere login, no puede reportar propio contenido)
+- Prevención de reportes duplicados
+- Panel de reportes en admin (pendientes/resueltos/descartados)
+- Sistema de bans temporal y permanente
+- Middleware de ban: bloquea crear posts, comentar, votar, reportar
+- Página dedicada para usuarios baneados (muestra razón, tipo y horas restantes)
+- Admin puede banear/desbanear usuarios por email (no dropdown de usuarios)
+- Endpoint GET /api/users/by-email para buscar usuario por email
+- Endpoint GET /api/auth/ban-status para verificar estado de ban del usuario logueado
+- Nav.js redirige automáticamente a banned.html si el usuario está baneado
+- Dashboard admin con conteo de reportes pendientes y bans activos
+
+### Perfil de usuario
+- Estadísticas (posts, comentarios, karma) y biografía
+- Historial de actividad reciente (últimos posts y comentarios)
+- Campos extendidos: nombre, apellido, edad, comisión, carrera, género
+- Email oculto en perfiles ajenos
+
+### Admin panel
+- Dashboard con estadísticas completas
+- Gestión de usuarios (rol/eliminar)
+- Gestión de categorías (crear/eliminar)
+- Gestión de tags (crear/eliminar con color)
+- Gestión de reportes (resolver/descartar)
+- Gestión de bans (banear/desbanear/ver expirados)
+
+### Otros
+- Sistema de etiquetas/tags con filtrado
+- Avatar/foto de perfil
+- Editar/eliminar comentarios (backend y frontend)
+- Ordenar por más votados, más recientes

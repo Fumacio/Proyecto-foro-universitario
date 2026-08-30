@@ -112,4 +112,56 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, update, remove, uploadAvatar, getStats };
+const getActivity = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const [posts] = await pool.query(
+      `SELECT p.id, p.title, p.created_at, c.name AS category_name
+       FROM posts p
+       JOIN categories c ON p.category_id = c.id
+       WHERE p.user_id = ?
+       ORDER BY p.created_at DESC LIMIT 5`,
+      [userId]
+    );
+
+    const [comments] = await pool.query(
+      `SELECT cm.id, cm.content, cm.created_at, p.id AS post_id, p.title AS post_title
+       FROM comments cm
+       JOIN posts p ON cm.post_id = p.id
+       WHERE cm.user_id = ?
+       ORDER BY cm.created_at DESC LIMIT 5`,
+      [userId]
+    );
+
+    res.json({ posts, comments });
+  } catch {
+    res.status(500).json({ error: 'Error al obtener actividad' });
+  }
+};
+
+const findByEmail = async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: 'Email requerido' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT u.id, u.username, u.email, r.name AS role
+       FROM users u JOIN roles r ON u.role_id = r.id
+       WHERE u.email = ?`,
+      [email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'No se encontró usuario con ese email' });
+    }
+
+    res.json(rows[0]);
+  } catch {
+    res.status(500).json({ error: 'Error al buscar usuario' });
+  }
+};
+
+module.exports = { getAll, getById, findByEmail, update, remove, uploadAvatar, getStats, getActivity };

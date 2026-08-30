@@ -1,8 +1,18 @@
-function renderNav() {
+async function renderNav() {
   const nav = document.getElementById('navbar');
   if (!nav) return;
 
   const user = getUser();
+
+  if (user && user.username && !window.location.pathname.includes('banned.html')) {
+    try {
+      const data = await api.get('/auth/ban-status');
+      if (data.banned) {
+        window.location.href = '/banned.html';
+        return;
+      }
+    } catch {}
+  }
 
   let html = `
     <nav class="navbar">

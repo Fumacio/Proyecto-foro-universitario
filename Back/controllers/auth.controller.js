@@ -1,6 +1,8 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const pool = require('../db/connection');
+const { sendMail } = require('../utils/mailer');
 
 const register = async (req, res) => {
   try {
@@ -153,4 +155,159 @@ const updateProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, updateProfile };
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'El email es obligatorio' });
+    }
+
+    const [rows] = await pool.query('SELECT id, email FROM users WHERE email = ?', [email]);
+
+    if (rows.length === 0) {
+      return res.json({ message: 'Si el email está registrado, recibirás un enlace de recuperación' });
+    }
+
+    const user = rows[0];
+
+    await pool.query('DELETE FROM password_resets WHERE user_id = ?', [user.id]);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await pool.query(
+      'INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)',
+      [user.id, token, expiresAt]
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password.html?token=${token}`;
+
+    await sendMail({
+      to: user.email,
+      subject: 'Recuperar contraseña - Foro UTN',
+      html: `
+        <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #F99B4A;">Recuperar contraseña</h2>
+          <p>Recibiste este email porque solicitaste recuperar tu contraseña.</p>
+          <p>Hacé click en el siguiente enlace para restablecer tu contraseña:</p>
+          <a href="${resetUrl}" style="display: inline-block; background-color: #F99B4A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Restablecer contraseña</a>
+          <p style="color: #707070; font-size: 13px;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este email.</p>
+        </div>
+      `
+    });
+
+    res.json({ message: 'Si el email está registrado, recibirás un enlace de recuperación' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Error al procesar la solicitud' });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token y contraseña son obligatorios' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
+    const [rows] = await pool.query(
+      'SELECT id, user_id, expires_at, used FROM password_resets WHERE token = ?',
+      [token]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Token inválido' });
+    }
+
+    const reset = rows[0];
+
+    if (reset.used) {
+      return res.status(400).json({ error: 'El token ya fue utilizado' });
+    }
+
+    if (new Date(reset.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'El token expiró. Solicitá uno nuevo' });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, reset.user_id]);
+    await pool.query('UPDATE password_resets SET used = 1 WHERE id = ?', [reset.id]);
+
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  } catch {
+    res.status(500).json({ error: 'Error al restablecer la contraseña' });
+  }
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'La contraseña es obligatoria para eliminar la cuenta' });
+    }
+
+    const [rows] = await pool.query('SELECT id, password_hash, role_id FROM users WHERE id = ?', [req.user.id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    if (rows[0].role_id === 1) {
+      return res.status(403).json({ error: 'Los administradores no pueden eliminar su cuenta desde aquí' });
+    }
+
+    const valid = await bcrypt.compare(password, rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'La contraseña es incorrecta' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = ?', [req.user.id]);
+
+    res.json({ message: 'Cuenta eliminada correctamente' });
+  } catch {
+    res.status(500).json({ error: 'Error al eliminar la cuenta' });
+  }
+};
+
+const banStatus = async (req, res) => {
+  try {
+    const [bans] = await pool.query(
+      `SELECT reason, type, expires_at FROM bans
+       WHERE user_id = ? AND (
+         type = 'permanent' OR
+         (type = 'temporary' AND expires_at > NOW())
+       ) ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id]
+    );
+
+    if (bans.length === 0) {
+      return res.json({ banned: false });
+    }
+
+    const ban = bans[0];
+    let hoursLeft = null;
+    if (ban.type === 'temporary' && ban.expires_at) {
+      const diff = new Date(ban.expires_at) - new Date();
+      hoursLeft = Math.max(0, Math.ceil(diff / (1000 * 60 * 60)));
+    }
+
+    res.json({
+      banned: true,
+      reason: ban.reason,
+      type: ban.type,
+      expires_at: ban.expires_at,
+      hours_left: hoursLeft
+    });
+  } catch {
+    res.status(500).json({ error: 'Error al verificar estado de ban' });
+  }
+};
+
+module.exports = { register, login, updateProfile, forgotPassword, resetPassword, deleteAccount, banStatus };

@@ -16,7 +16,7 @@ const api = {
   get: (url) => request(url),
   post: (url, body) => request(url, { method: 'POST', body: JSON.stringify(body) }),
   put: (url, body) => request(url, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: (url) => request(url, { method: 'DELETE' }),
+  delete: (url, options = {}) => request(url, { method: 'DELETE', ...options }),
 };
 
 function getUser() {

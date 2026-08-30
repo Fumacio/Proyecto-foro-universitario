@@ -33,6 +33,89 @@ function toggleComments() {
   }
 }
 
+function showReportModal(type, id) {
+  if (!isLoggedIn()) {
+    showLoginPrompt('reportar');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'report-overlay';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width: 450px">
+      <h3 class="text-lg font-bold text-primary mb-2">Reportar ${type === 'post' ? 'post' : 'comentario'}</h3>
+      <p class="text-secondary text-sm mb-4">Seleccioná la razón del reporte:</p>
+      <form id="report-form" class="space-y-3">
+        <input type="hidden" name="type" value="${type}">
+        <input type="hidden" name="id" value="${id}">
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary">
+            <input type="radio" name="reason" value="spam" class="accent-[var(--orange)]" required> Spam
+          </label>
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary">
+            <input type="radio" name="reason" value="abuso" class="accent-[var(--orange)]"> Abuso / Acoso
+          </label>
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary">
+            <input type="radio" name="reason" value="contenido_inapropiado" class="accent-[var(--orange)]"> Contenido inapropiado
+          </label>
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary">
+            <input type="radio" name="reason" value="off_topic" class="accent-[var(--orange)]"> Off-topic
+          </label>
+          <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary">
+            <input type="radio" name="reason" value="otro" class="accent-[var(--orange)]"> Otro
+          </label>
+        </div>
+        <div>
+          <label class="text-secondary text-xs mb-1 block">Descripción (opcional)</label>
+          <textarea name="description" rows="2" placeholder="Detallá el problema..."
+                    class="w-full input-field rounded px-3 py-2 text-sm"></textarea>
+        </div>
+        <div id="report-msg" class="text-sm" style="display: none"></div>
+        <div class="flex gap-2 justify-end">
+          <button type="button" onclick="closeReportModal()" class="text-muted hover:text-secondary text-sm px-3 py-1.5">Cancelar</button>
+          <button type="submit" class="btn-primary px-4 py-1.5 rounded text-sm">Enviar reporte</button>
+        </div>
+      </form>
+    </div>
+  `;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeReportModal();
+  });
+  document.body.appendChild(overlay);
+
+  document.getElementById('report-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const reportType = form.type.value;
+    const reportId = Number(form.id.value);
+    const reason = form.reason.value;
+    const description = form.description.value.trim() || null;
+    const msgEl = document.getElementById('report-msg');
+
+    try {
+      const body = { reason, description };
+      if (reportType === 'post') body.post_id = reportId;
+      else body.comment_id = reportId;
+
+      await api.post('/reports', body);
+      msgEl.textContent = 'Reporte enviado. Gracias!';
+      msgEl.style.color = 'var(--green)';
+      msgEl.style.display = 'block';
+      setTimeout(closeReportModal, 1500);
+    } catch (err) {
+      msgEl.textContent = err.error || 'Error al enviar reporte';
+      msgEl.style.color = 'var(--red)';
+      msgEl.style.display = 'block';
+    }
+  });
+}
+
+function closeReportModal() {
+  const overlay = document.getElementById('report-overlay');
+  if (overlay) overlay.remove();
+}
+
 async function loadPost() {
   postId = getPostId();
   if (!postId) {
@@ -48,6 +131,7 @@ async function loadPost() {
 
     const user = getUser();
     const canEdit = user && (user.id === post.user_id || user.role === 'admin');
+    const canReport = user && user.id !== post.user_id;
 
     const avatarHtml = post.avatar_url
       ? `<img src="${post.avatar_url}" alt="" class="w-6 h-6 rounded-full object-cover inline-block">`
@@ -69,6 +153,9 @@ async function loadPost() {
             ${canEdit ? `
               <button onclick="showEditPost()" class="text-sm link-theme hover:underline">Editar</button>
               <button onclick="deletePost()" class="text-sm" style="color: var(--red)">Eliminar</button>
+            ` : ''}
+            ${canReport ? `
+              <button onclick="showReportModal('post', ${post.id})" class="text-sm text-muted hover:text-secondary" title="Reportar">Reportar</button>
             ` : ''}
           </div>
         </div>
@@ -126,6 +213,7 @@ async function loadComments() {
 function renderComment(comment) {
   const user = getUser();
   const canEdit = user && (user.id === comment.user_id || user.role === 'admin');
+  const canReport = user && user.id !== comment.user_id;
 
   const avatarHtml = comment.avatar_url
     ? `<img src="${comment.avatar_url}" alt="" class="w-5 h-5 rounded-full object-cover inline-block">`
@@ -141,6 +229,9 @@ function renderComment(comment) {
           <span class="text-muted">${new Date(comment.created_at).toLocaleDateString('es-AR')}</span>
         </div>
         <div class="flex items-center gap-2">
+          ${canReport ? `
+            <button onclick="showReportModal('comment', ${comment.id})" class="text-xs text-muted hover:text-secondary">Reportar</button>
+          ` : ''}
           ${canEdit ? `
             <button onclick="showEditComment(${comment.id})" class="text-xs link-theme hover:underline">Editar</button>
             <button onclick="deleteComment(${comment.id})" class="text-xs" style="color: var(--red)">Eliminar</button>

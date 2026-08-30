@@ -99,3 +99,50 @@ CREATE TABLE IF NOT EXISTS post_tags (
   FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
   FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- Tokens de recuperación de contraseña
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(64) NOT NULL UNIQUE,
+  expires_at TIMESTAMP NOT NULL,
+  used TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_token (token),
+  INDEX idx_user (user_id)
+) ENGINE=InnoDB;
+
+-- Bans de usuarios
+CREATE TABLE IF NOT EXISTS bans (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  reason TEXT NOT NULL,
+  type ENUM('temporary', 'permanent') NOT NULL DEFAULT 'temporary',
+  expires_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  banned_by INT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_user_bans (user_id),
+  INDEX idx_expires (expires_at)
+) ENGINE=InnoDB;
+
+-- Reportes de contenido
+CREATE TABLE IF NOT EXISTS reports (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  reporter_id INT NOT NULL,
+  post_id INT,
+  comment_id INT,
+  reason ENUM('spam', 'abuso', 'contenido_inapropiado', 'off_topic', 'otro') NOT NULL,
+  description TEXT,
+  status ENUM('pending', 'resolved', 'dismissed') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP NULL,
+  resolved_by INT,
+  FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE SET NULL,
+  FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE SET NULL,
+  FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_status (status)
+) ENGINE=InnoDB;

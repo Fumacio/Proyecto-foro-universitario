@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ForoU - Cuenta Baneada</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/theme.css">
+</head>
+<body class="min-h-screen">
+  <div id="navbar"></div>
+
+  <div class="max-w-md mx-auto px-4 py-16">
+    <div class="card rounded-lg p-8 text-center">
+      <div class="text-5xl mb-4">&#128683;</div>
+      <h1 class="text-2xl font-bold mb-2" style="color: var(--red)">Cuenta baneada</h1>
+      <p class="text-secondary text-sm mb-6">Tu cuenta ha sido suspendida y no podés acceder al foro.</p>
+
+      <div class="rounded-lg p-4 mb-6 text-left space-y-2" style="background-color: var(--bg-input); border: 1px solid var(--border)">
+        <div>
+          <span class="text-muted text-xs">Razón</span>
+          <p class="text-primary text-sm font-medium" id="ban-reason">-</p>
+        </div>
+        <div>
+          <span class="text-muted text-xs">Tipo de ban</span>
+          <p class="text-sm" id="ban-type">-</p>
+        </div>
+        <div id="ban-duration-row">
+          <span class="text-muted text-xs">Tiempo restante</span>
+          <p class="text-sm font-medium" id="ban-duration" style="color: var(--orange)">-</p>
+        </div>
+      </div>
+
+      <p class="text-muted text-xs mb-4">Si creés que esto es un error, contactá a un administrador.</p>
+      <a href="#" onclick="localStorage.removeItem('token');localStorage.removeItem('user');window.location.href='/login.html'" class="link-theme hover:underline text-sm">Cerrar sesión y volver al login</a>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    (async () => {
+      if (!isLoggedIn()) {
+        window.location.href = '/login.html';
+        return;
+      }
+
+      try {
+        const data = await api.get('/auth/ban-status');
+        if (!data.banned) {
+          window.location.href = '/';
+          return;
+        }
+
+        document.getElementById('ban-reason').textContent = data.reason;
+
+        if (data.type === 'permanent') {
+          document.getElementById('ban-type').innerHTML = '<span style="color: var(--red)">Permanente</span>';
+          document.getElementById('ban-duration-row').style.display = 'none';
+        } else {
+          document.getElementById('ban-type').innerHTML = '<span style="color: var(--orange)">Temporal</span>';
+          const h = data.hours_left;
+          document.getElementById('ban-duration').textContent = h > 0 ? `${h} hora${h !== 1 ? 's' : ''}` : 'Expirando...';
+        }
+      } catch {
+        window.location.href = '/';
+      }
+    })();
+  </script>
+</body>
+</html>
