@@ -18,6 +18,7 @@ async function loadProfile() {
     const isOwn = user.id === Number(userId);
 
     const data = await api.get(`/users/${userId}`);
+    const stats = await api.get(`/users/${userId}/stats`);
 
     const avatarHtml = data.avatar_url
       ? `<img src="${data.avatar_url}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
@@ -36,6 +37,23 @@ async function loadProfile() {
             <span class="text-xs badge-${data.role} px-2 py-0.5 rounded-full">${escapeHtml(data.role)}</span>
           </div>
         </div>
+
+        <div class="grid grid-cols-3 gap-4 mb-6 p-3 rounded-lg" style="background-color: var(--bg-input)">
+          <div class="text-center">
+            <div class="text-lg font-bold text-primary">${stats.posts}</div>
+            <div class="text-xs text-secondary">Posts</div>
+          </div>
+          <div class="text-center">
+            <div class="text-lg font-bold text-primary">${stats.comments}</div>
+            <div class="text-xs text-secondary">Comentarios</div>
+          </div>
+          <div class="text-center">
+            <div class="text-lg font-bold ${stats.karma > 0 ? 'vote-positive' : stats.karma < 0 ? 'vote-negative' : 'text-muted'}">${stats.karma}</div>
+            <div class="text-xs text-secondary">Karma</div>
+          </div>
+        </div>
+
+        ${data.bio ? `<p class="text-secondary text-sm mb-6 whitespace-pre-wrap">${escapeHtml(data.bio)}</p>` : ''}
 
         <div class="space-y-3 text-sm">
           ${data.email ? `
@@ -147,6 +165,11 @@ async function loadProfile() {
                 ).join('')}
               </select>
             </div>
+            <div>
+              <label class="text-secondary text-xs mb-1 block">Biografía</label>
+              <textarea name="bio" rows="3" maxlength="500" placeholder="Contá algo sobre vos..."
+                        class="w-full input-field rounded px-3 py-2 text-sm">${escapeHtml(data.bio || '')}</textarea>
+            </div>
             <div class="border-t border-theme pt-3 mt-3">
               <p class="text-muted text-xs mb-2">Dejar en blanco para no cambiar la contraseña</p>
               <div class="grid grid-cols-2 gap-3">
@@ -195,7 +218,8 @@ async function submitEditProfile(e) {
     age: form.age.value ? Number(form.age.value) : null,
     commission: form.commission.value.trim() || null,
     career: form.career.value || null,
-    gender: form.gender.value || null
+    gender: form.gender.value || null,
+    bio: form.bio.value.trim() || null
   };
 
   if (form.new_password.value) {

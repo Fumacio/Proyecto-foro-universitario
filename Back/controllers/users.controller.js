@@ -3,7 +3,7 @@ const pool = require('../db/connection');
 const getAll = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.email, u.avatar_url, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
+      'SELECT u.id, u.username, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.email, u.avatar_url, u.bio, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
     );
     res.json(rows);
   } catch {
@@ -14,7 +14,7 @@ const getAll = async (req, res) => {
 const getById = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio, u.created_at FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [req.params.id]
     );
 
@@ -88,4 +88,28 @@ const uploadAvatar = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, update, remove, uploadAvatar };
+const getStats = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const [[postsRow]] = await pool.query('SELECT COUNT(*) AS total FROM posts WHERE user_id = ?', [userId]);
+    const [[commentsRow]] = await pool.query('SELECT COUNT(*) AS total FROM comments WHERE user_id = ?', [userId]);
+    const [[karmaRow]] = await pool.query(
+      `SELECT COALESCE(SUM(v.value), 0) AS total FROM votes v
+       LEFT JOIN posts p ON v.post_id = p.id
+       LEFT JOIN comments c ON v.comment_id = c.id
+       WHERE p.user_id = ? OR c.user_id = ?`,
+      [userId, userId]
+    );
+
+    res.json({
+      posts: postsRow.total,
+      comments: commentsRow.total,
+      karma: Number(karmaRow.total)
+    });
+  } catch {
+    res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+};
+
+module.exports = { getAll, getById, update, remove, uploadAvatar, getStats };

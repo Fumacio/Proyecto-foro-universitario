@@ -14,6 +14,32 @@ function getSort() {
   return params.get('sort') || 'recent';
 }
 
+function getSearchQuery() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('q') || '';
+}
+
+function handleSearch(e) {
+  e.preventDefault();
+  const input = document.getElementById('search-input');
+  const q = input.value.trim();
+  const params = new URLSearchParams(window.location.search);
+  if (q) {
+    params.set('q', q);
+  } else {
+    params.delete('q');
+  }
+  params.delete('page');
+  window.location.search = params.toString();
+}
+
+function clearSearch() {
+  const params = new URLSearchParams(window.location.search);
+  params.delete('q');
+  params.delete('page');
+  window.location.search = params.toString();
+}
+
 function showNewPostForm() {
   if (!isLoggedIn()) {
     showLoginPrompt('crear un post');
@@ -48,7 +74,6 @@ async function loadSidebarTags() {
   const container = document.getElementById('sidebar-tags');
   try {
     const tags = await api.get('/tags');
-    const params = new URLSearchParams(window.location.search);
 
     container.innerHTML = `
       <label class="flex items-center gap-2 text-sm text-secondary cursor-pointer hover:text-primary transition-colors">
@@ -101,6 +126,15 @@ async function loadPosts(page = 1) {
   const params = new URLSearchParams(window.location.search);
   activeTagId = params.get('tag_id');
   const sort = getSort();
+  const searchQuery = getSearchQuery();
+
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.value = searchQuery;
+
+  const clearBtn = document.getElementById('clear-search-btn');
+  if (clearBtn) {
+    clearBtn.classList.toggle('hidden', !searchQuery);
+  }
 
   currentPage = page;
   const container = document.getElementById('posts');
@@ -130,12 +164,16 @@ async function loadPosts(page = 1) {
     queryParams.set('limit', POSTS_PER_PAGE);
     if (activeTagId) queryParams.set('tag_id', activeTagId);
     if (sort !== 'recent') queryParams.set('sort', sort);
+    if (searchQuery) queryParams.set('q', searchQuery);
 
     const result = await api.get(`/posts?${queryParams.toString()}`);
     const posts = result.data;
 
     if (posts.length === 0 && currentPage === 1) {
-      container.innerHTML = '<p class="text-muted text-center py-8">No hay posts en esta categoría</p>';
+      const msg = searchQuery
+        ? `No se encontraron posts para "${searchQuery}"`
+        : 'No hay posts en esta categoría';
+      container.innerHTML = `<p class="text-muted text-center py-8">${msg}</p>`;
       document.getElementById('pagination').innerHTML = '';
       return;
     }

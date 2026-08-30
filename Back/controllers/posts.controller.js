@@ -26,8 +26,8 @@ async function getTagsByPostIds(postIds) {
 const getAll = async (req, res) => {
   try {
     const { category_id, tag_id, q, sort = 'recent', page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
     const offset = (pageNum - 1) * limitNum;
 
     let countQuery = 'SELECT COUNT(*) AS total FROM posts p';

@@ -1,32 +1,47 @@
-- Lista de pendientes:
+- Lista de pendientes (ordenados por prioridad):
 
-1. Sistema de notificaciones
+## 1. Búsqueda avanzada (Prioridad ALTA)
+- Filtrar por fecha y autor
+- Extender los filtros existentes de búsqueda por título/contenido
+
+## 2. Sistema de notificaciones (Prioridad ALTA)
 - Notificar al usuario cuando alguien comenta en su post
 - Notificar cuando alguien responde a su comentario
 - Notificar cuando reciben votos
-2. Sistema de etiquetas/tags ✅ COMPLETADO
-- Permitir agregar etiquetas a los posts (ej: "duda", "tarea", "examen") ✅
-- Filtrar posts por etiquetas ✅
-3. Mejoras en el perfil de usuario
-- Mostrar estadísticas del usuario (posts creados, comentarios, karma)
-- Agregar biografía
-4. Moderación y reportes
+- Tabla `notifications` con estado de leído/no leído
+- Endpoint para marcar notificaciones como leídas
+
+## 3. @menciones en comentarios (Prioridad MEDIA)
+- Parsear @usuario en el contenido del comentario
+- Buscar el usuario mencionado
+- Crear notificación asociada a la mención (se integra con el sistema de notificaciones)
+
+## 4. Markdown en posts/comentarios (Prioridad MEDIA)
+- Soporte de Markdown en el contenido de posts y comentarios
+- Usar librería frontend (marked o markdown-it vía CDN)
+- No requiere cambios en backend
+
+## 5. Recuperación de contraseña (Prioridad BAJA)
+- Recuperar contraseña por email
+- Configurar servicio SMTP (SendGrid, Mailgun, etc.)
+- Templates de email
+
+## 6. Verificación de email (Prioridad BAJA)
+- Verificar email al registrarse
+- Token de verificación por email
+- Desbloquear funcionalidades solo con email verificado
+
+## 7. OAuth login (Prioridad BAJA)
+- Login con Google/GitHub
+- Flujo OAuth completo
+- Manejo de cuentas vinculadas
+
+## 8. Moderación y reportos (Prioridad BAJA)
 - Sistema de reportar posts/comentarios inapropiados
 - Panel de moderación para admins
 - Sistema de bans temporal/definitivo
-5. Búsqueda avanzada
-- Filtrar por fecha, autor, categoría
-6. Mejoras en comentarios
-- Mentiones @usuario en comentarios
-- Markdown en el contenido de posts y comentarios
-7. Admin panel (backend listo, falta frontend)
-- Dashboard con estadísticas
-- Gestión de usuarios (ver/editar/eliminar)
-- Gestión de categorías
-8. Autenticación mejorada
-- Recuperar contraseña por email
-- Verificar email
-- Login con Google/GitHub (OAuth)
+
+---
 
 ✅ COMPLETADO:
 - Sistema de etiquetas/tags con filtrado
@@ -34,8 +49,14 @@
 - Editar/eliminar comentarios (backend y frontend)
 - Ordenar por más votados, más recientes
 - Búsqueda por título/contenido con paginación
+- Búsqueda con caracteres especiales (áéíóú ñ) funciona correctamente
+- Botón de limpiar búsqueda
+- Buscador solo dentro de categorías (removido del navbar)
+- Fix: conflicto de IDs entre navbar search y posts search
 - Email oculto en perfiles ajenos (solo visible para el propio usuario o admin)
 - Campos extendidos en registro: nombre, apellido, edad, comisión, carrera, género
 - Fix: vote_count ahora retorna number en vez de string
 - Fix: updateProfile retornaba usuario vacío
 - Fix: conflicto de rutas upload-image
+- Mejoras en perfil de usuario: estadísticas (posts, comentarios, karma) y biografía
+- Admin panel completo: dashboard con estadísticas, gestión de usuarios (rol/eliminar), gestión de categorías (crear/eliminar), gestión de tags (crear/eliminar con color)
