@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const getAll = async (req, res) => {
   try {
@@ -15,8 +16,8 @@ const getAll = async (req, res) => {
     }
 
     res.json(rows);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener categorías' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener categorías');
   }
 };
 
@@ -36,8 +37,8 @@ const getById = async (req, res) => {
     category.subcategories = children;
 
     res.json(category);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener categoría' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener categoría');
   }
 };
 
@@ -55,8 +56,8 @@ const create = async (req, res) => {
     );
 
     res.status(201).json({ id: result.insertId, name, description, parent_id });
-  } catch {
-    res.status(500).json({ error: 'Error al crear categoría' });
+  } catch (err) {
+    sendError(res, err, 'Error al crear categoría');
   }
 };
 
@@ -78,8 +79,8 @@ const update = async (req, res) => {
     await pool.query(`UPDATE categories SET ${fields.join(', ')} WHERE id = ?`, values);
 
     res.json({ message: 'Categoría actualizada' });
-  } catch {
-    res.status(500).json({ error: 'Error al actualizar categoría' });
+  } catch (err) {
+    sendError(res, err, 'Error al actualizar categoría');
   }
 };
 
@@ -92,8 +93,8 @@ const remove = async (req, res) => {
     }
 
     res.json({ message: 'Categoría eliminada' });
-  } catch {
-    res.status(500).json({ error: 'Error al eliminar categoría' });
+  } catch (err) {
+    sendError(res, err, 'Error al eliminar categoría');
   }
 };
 

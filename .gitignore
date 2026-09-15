@@ -1,5 +1,8 @@
 node_modules/
 .env
+Back/.env
+*.env
+nul
 Back/uploads/avatars/*
 Back/uploads/posts/*
 !Back/uploads/avatars/.gitkeep

@@ -178,71 +178,12 @@ async function loadPosts(page = 1) {
       return;
     }
 
-    container.innerHTML = posts.map(post => `
-      <a href="/post.html?id=${post.id}" class="block card rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div class="flex items-start gap-3">
-          <div class="flex-shrink-0 mt-1">
-            ${post.avatar_url
-              ? `<img src="${post.avatar_url}" alt="" class="w-9 h-9 rounded-full object-cover">`
-              : `<div class="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold" style="background-color: var(--orange-light); color: var(--orange)">${escapeHtml(post.username.charAt(0).toUpperCase())}</div>`
-            }
-          </div>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-primary">${escapeHtml(post.title)}</h3>
-            <p class="text-secondary text-sm mt-1 line-clamp-2">${escapeHtml(post.content.substring(0, 150))}${post.content.length > 150 ? '...' : ''}</p>
-            <div class="flex items-center gap-4 mt-2 text-xs text-muted">
-              <span>por ${escapeHtml(post.username)}</span>
-              <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
-              <span>${post.comment_count} comentarios</span>
-              ${post.tags && post.tags.length > 0 ? `<span class="flex items-center gap-1">${post.tags.map(t => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${t.color}15; color: ${t.color}">${escapeHtml(t.name)}</span>`).join('')}</span>` : ''}
-            </div>
-          </div>
-          <div class="text-right ml-4 flex-shrink-0">
-            <div class="vote-group">
-              <span class="vote-btn" style="color: var(--green); font-size: 10px;">▲</span>
-              <span class="vote-count ${post.vote_count > 0 ? 'vote-positive' : post.vote_count < 0 ? 'vote-negative' : 'vote-neutral'}">${post.vote_count}</span>
-              <span class="vote-btn" style="color: var(--red); font-size: 10px;">▼</span>
-            </div>
-          </div>
-        </div>
-      </a>
-    `).join('');
+    container.innerHTML = posts.map(post => renderPostCard(post)).join('');
 
-    renderPagination(result.pages, result.page);
+    renderPagination('pagination', result.pages, result.page, 'loadPosts');
   } catch (err) {
     container.innerHTML = '<p style="color: var(--red)">Error al cargar posts</p>';
   }
-}
-
-function renderPagination(totalPages, activePage) {
-  const container = document.getElementById('pagination');
-  if (!container || totalPages <= 1) {
-    if (container) container.innerHTML = '';
-    return;
-  }
-
-  let html = '<div class="flex items-center justify-center gap-2 mt-6">';
-
-  if (activePage > 1) {
-    html += `<button onclick="loadPosts(${activePage - 1})" class="btn-secondary px-3 py-1.5 rounded text-sm">← Anterior</button>`;
-  }
-
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === activePage) {
-      html += `<span class="btn-primary px-3 py-1.5 rounded text-sm cursor-default">${i}</span>`;
-    } else if (i === 1 || i === totalPages || Math.abs(i - activePage) <= 2) {
-      html += `<button onclick="loadPosts(${i})" class="btn-secondary px-3 py-1.5 rounded text-sm">${i}</button>`;
-    } else if (Math.abs(i - activePage) === 3) {
-      html += `<span class="text-muted px-1">...</span>`;
-    }
-  }
-
-  if (activePage < totalPages) {
-    html += `<button onclick="loadPosts(${activePage + 1})" class="btn-secondary px-3 py-1.5 rounded text-sm">Siguiente →</button>`;
-  }
-
-  html += '</div>';
-  container.innerHTML = html;
 }
 
 document.getElementById('create-post-form').addEventListener('submit', async (e) => {

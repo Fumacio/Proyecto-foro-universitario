@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const createReport = async (req, res) => {
   try {
@@ -52,8 +53,8 @@ const createReport = async (req, res) => {
     );
 
     res.status(201).json({ id: result.insertId, message: 'Reporte enviado correctamente' });
-  } catch {
-    res.status(500).json({ error: 'Error al crear reporte' });
+  } catch (err) {
+    sendError(res, err, 'Error al crear reporte');
   }
 };
 
@@ -78,8 +79,8 @@ const getReports = async (req, res) => {
     );
 
     res.json(reports);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener reportes' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener reportes');
   }
 };
 
@@ -89,8 +90,8 @@ const getReportCounts = async (req, res) => {
     const [[resolved]] = await pool.query("SELECT COUNT(*) AS total FROM reports WHERE status = 'resolved'");
     const [[dismissed]] = await pool.query("SELECT COUNT(*) AS total FROM reports WHERE status = 'dismissed'");
     res.json({ pending: pending.total, resolved: resolved.total, dismissed: dismissed.total });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener conteo de reportes' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener conteo de reportes');
   }
 };
 
@@ -118,8 +119,8 @@ const resolveReport = async (req, res) => {
     );
 
     res.json({ message: `Reporte marcado como ${action}` });
-  } catch {
-    res.status(500).json({ error: 'Error al resolver reporte' });
+  } catch (err) {
+    sendError(res, err, 'Error al resolver reporte');
   }
 };
 

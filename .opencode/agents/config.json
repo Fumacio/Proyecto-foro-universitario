@@ -1,0 +1,5 @@
+{
+  "default_agent": "orchestrator",
+  "agents_directory": ".opencode/agents",
+  "log_level": "info"
+}

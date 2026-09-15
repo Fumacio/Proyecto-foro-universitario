@@ -5,7 +5,8 @@
   "main": "Back/server.js",
   "scripts": {
     "start": "node Back/server.js",
-    "dev": "node Back/server.js"
+    "dev": "node Back/server.js",
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -14,12 +15,16 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
-    "crypto": "^1.0.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "mysql2": "^3.23.3",
     "nodemailer": "^9.0.6"
+  },
+  "devDependencies": {
+    "jest": "^30.5.1",
+    "supertest": "^7.2.2"
   }
 }

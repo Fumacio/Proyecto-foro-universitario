@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const getDashboard = async (req, res) => {
   try {
@@ -28,8 +29,8 @@ const getDashboard = async (req, res) => {
       recentUsers,
       recentPosts
     });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener dashboard' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener dashboard');
   }
 };
 

@@ -1,4 +1,21 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
+
+async function getPostVoteCount(postId) {
+  const [rows] = await pool.query(
+    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE post_id = ?',
+    [postId]
+  );
+  return Number(rows[0].total);
+}
+
+async function getCommentVoteCount(commentId) {
+  const [rows] = await pool.query(
+    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE comment_id = ?',
+    [commentId]
+  );
+  return Number(rows[0].total);
+}
 
 const votePost = async (req, res) => {
   try {
@@ -33,8 +50,8 @@ const votePost = async (req, res) => {
     }
 
     res.json({ message: 'Voto registrado', vote_count: await getPostVoteCount(id) });
-  } catch {
-    res.status(500).json({ error: 'Error al votar' });
+  } catch (err) {
+    sendError(res, err, 'Error al votar');
   }
 };
 
@@ -71,25 +88,9 @@ const voteComment = async (req, res) => {
     }
 
     res.json({ message: 'Voto registrado', vote_count: await getCommentVoteCount(id) });
-  } catch {
-    res.status(500).json({ error: 'Error al votar' });
+  } catch (err) {
+    sendError(res, err, 'Error al votar');
   }
 };
-
-async function getPostVoteCount(postId) {
-  const [rows] = await pool.query(
-    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE post_id = ?',
-    [postId]
-  );
-  return Number(rows[0].total);
-}
-
-async function getCommentVoteCount(commentId) {
-  const [rows] = await pool.query(
-    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE comment_id = ?',
-    [commentId]
-  );
-  return Number(rows[0].total);
-}
 
 module.exports = { votePost, voteComment };

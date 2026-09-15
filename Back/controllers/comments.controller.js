@@ -1,4 +1,6 @@
 const pool = require('../db/connection');
+const { buildTree } = require('../utils/tree.utils');
+const { sendError } = require('../utils/response.utils');
 
 const getByPost = async (req, res) => {
   try {
@@ -32,19 +34,10 @@ const getByPost = async (req, res) => {
       limit: limitNum,
       pages: Math.ceil(total / limitNum)
     });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener comentarios' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener comentarios');
   }
 };
-
-function buildTree(items, parentId) {
-  return items
-    .filter(item => item.parent_id === parentId)
-    .map(item => ({
-      ...item,
-      replies: buildTree(items, item.id)
-    }));
-}
 
 const create = async (req, res) => {
   try {
@@ -66,8 +59,8 @@ const create = async (req, res) => {
     );
 
     res.status(201).json({ id: result.insertId, post_id: Number(postId), content, parent_id });
-  } catch {
-    res.status(500).json({ error: 'Error al crear comentario' });
+  } catch (err) {
+    sendError(res, err, 'Error al crear comentario');
   }
 };
 
@@ -90,8 +83,8 @@ const update = async (req, res) => {
 
     await pool.query('UPDATE comments SET content = ? WHERE id = ?', [content, req.params.id]);
     res.json({ message: 'Comentario actualizado' });
-  } catch {
-    res.status(500).json({ error: 'Error al actualizar comentario' });
+  } catch (err) {
+    sendError(res, err, 'Error al actualizar comentario');
   }
 };
 
@@ -109,8 +102,8 @@ const remove = async (req, res) => {
 
     await pool.query('DELETE FROM comments WHERE id = ?', [req.params.id]);
     res.json({ message: 'Comentario eliminado' });
-  } catch {
-    res.status(500).json({ error: 'Error al eliminar comentario' });
+  } catch (err) {
+    sendError(res, err, 'Error al eliminar comentario');
   }
 };
 

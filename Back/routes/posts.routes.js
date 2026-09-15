@@ -10,7 +10,7 @@ router.get('/', getAll);
 router.post('/upload-image', auth, checkBan, uploadPostImage, uploadImage);
 router.get('/:id', getById);
 router.post('/', auth, checkBan, create);
-router.put('/:id', auth, update);
-router.delete('/:id', auth, remove);
+router.put('/:id', auth, checkBan, update);
+router.delete('/:id', auth, checkBan, remove);
 
 module.exports = router;

@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const pool = require('../db/connection');
 const { sendMail } = require('../utils/mailer');
+const { sendError } = require('../utils/response.utils');
 
 const register = async (req, res) => {
   try {
@@ -29,13 +30,13 @@ const register = async (req, res) => {
     );
 
     const token = jwt.sign(
-      { id: result.insertId, username, role: 'alumno' },
+      { id: result.insertId, username, role: 'alumno', token_version: 1 },
       process.env.JWT_SECRET
     );
 
     res.status(201).json({ token, user: { id: result.insertId, username, email, role: 'alumno', first_name, last_name, age, commission, career, gender, bio: bio || null } });
-  } catch {
-    res.status(500).json({ error: 'Error al registrar usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al registrar usuario');
   }
 };
 
@@ -48,7 +49,7 @@ const login = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      'SELECT u.*, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ?',
+      'SELECT u.id, u.username, u.email, u.password_hash, u.avatar_url, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio, u.token_version, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ?',
       [email]
     );
 
@@ -64,13 +65,13 @@ const login = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, token_version: user.token_version },
       process.env.JWT_SECRET
     );
 
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url, first_name: user.first_name, last_name: user.last_name, age: user.age, commission: user.commission, career: user.career, gender: user.gender, bio: user.bio } });
-  } catch {
-    res.status(500).json({ error: 'Error al iniciar sesión' });
+  } catch (err) {
+    sendError(res, err, 'Error al iniciar sesión');
   }
 };
 
@@ -145,13 +146,13 @@ const updateProfile = async (req, res) => {
 
     const updatedUser = updated[0];
     const token = jwt.sign(
-      { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role },
+      { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, token_version: updatedUser.token_version || 1 },
       process.env.JWT_SECRET
     );
 
     res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url, first_name: updatedUser.first_name, last_name: updatedUser.last_name, age: updatedUser.age, commission: updatedUser.commission, career: updatedUser.career, gender: updatedUser.gender, bio: updatedUser.bio } });
-  } catch {
-    res.status(500).json({ error: 'Error al actualizar perfil' });
+  } catch (err) {
+    sendError(res, err, 'Error al actualizar perfil');
   }
 };
 
@@ -199,8 +200,7 @@ const forgotPassword = async (req, res) => {
 
     res.json({ message: 'Si el email está registrado, recibirás un enlace de recuperación' });
   } catch (err) {
-    console.error('Forgot password error:', err);
-    res.status(500).json({ error: 'Error al procesar la solicitud' });
+    sendError(res, err, 'Error al procesar la solicitud');
   }
 };
 
@@ -236,12 +236,12 @@ const resetPassword = async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, reset.user_id]);
+    await pool.query('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?', [hash, reset.user_id]);
     await pool.query('UPDATE password_resets SET used = 1 WHERE id = ?', [reset.id]);
 
     res.json({ message: 'Contraseña actualizada correctamente' });
-  } catch {
-    res.status(500).json({ error: 'Error al restablecer la contraseña' });
+  } catch (err) {
+    sendError(res, err, 'Error al restablecer la contraseña');
   }
 };
 
@@ -271,8 +271,8 @@ const deleteAccount = async (req, res) => {
     await pool.query('DELETE FROM users WHERE id = ?', [req.user.id]);
 
     res.json({ message: 'Cuenta eliminada correctamente' });
-  } catch {
-    res.status(500).json({ error: 'Error al eliminar la cuenta' });
+  } catch (err) {
+    sendError(res, err, 'Error al eliminar la cuenta');
   }
 };
 
@@ -305,8 +305,8 @@ const banStatus = async (req, res) => {
       expires_at: ban.expires_at,
       hours_left: hoursLeft
     });
-  } catch {
-    res.status(500).json({ error: 'Error al verificar estado de ban' });
+  } catch (err) {
+    sendError(res, err, 'Error al verificar estado de ban');
   }
 };
 

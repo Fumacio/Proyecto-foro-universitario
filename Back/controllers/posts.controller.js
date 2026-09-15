@@ -1,27 +1,5 @@
 const pool = require('../db/connection');
-
-async function saveTags(postId, tagIds) {
-  if (!tagIds || tagIds.length === 0) return;
-  const values = tagIds.map(id => [postId, id]);
-  await pool.query('INSERT INTO post_tags (post_id, tag_id) VALUES ?', [values]);
-}
-
-async function getTagsByPostIds(postIds) {
-  if (postIds.length === 0) return {};
-  const [rows] = await pool.query(
-    `SELECT pt.post_id, t.id, t.name, t.color
-     FROM post_tags pt
-     JOIN tags t ON pt.tag_id = t.id
-     WHERE pt.post_id IN (?)`,
-    [postIds]
-  );
-  const map = {};
-  for (const row of rows) {
-    if (!map[row.post_id]) map[row.post_id] = [];
-    map[row.post_id].push({ id: row.id, name: row.name, color: row.color });
-  }
-  return map;
-}
+const { saveTags, getTagsByPostIds } = require('../utils/post.utils');
 
 const getAll = async (req, res) => {
   try {
@@ -91,7 +69,8 @@ const getAll = async (req, res) => {
       limit: limitNum,
       pages: Math.ceil(total / limitNum)
     });
-  } catch {
+  } catch (err) {
+    console.error('[posts.getAll]', err);
     res.status(500).json({ error: 'Error al obtener posts' });
   }
 };
@@ -114,7 +93,8 @@ const getById = async (req, res) => {
 
     const tagsMap = await getTagsByPostIds([rows[0].id]);
     res.json({ ...rows[0], tags: tagsMap[rows[0].id] || [] });
-  } catch {
+  } catch (err) {
+    console.error('[posts.getById]', err);
     res.status(500).json({ error: 'Error al obtener post' });
   }
 };
@@ -137,7 +117,8 @@ const create = async (req, res) => {
     }
 
     res.status(201).json({ id: result.insertId, title, content, category_id, image_url: image_url || null });
-  } catch {
+  } catch (err) {
+    console.error('[posts.create]', err);
     res.status(500).json({ error: 'Error al crear post' });
   }
 };
@@ -178,7 +159,8 @@ const update = async (req, res) => {
     }
 
     res.json({ message: 'Post actualizado' });
-  } catch {
+  } catch (err) {
+    console.error('[posts.update]', err);
     res.status(500).json({ error: 'Error al actualizar post' });
   }
 };
@@ -197,7 +179,8 @@ const remove = async (req, res) => {
 
     await pool.query('DELETE FROM posts WHERE id = ?', [req.params.id]);
     res.json({ message: 'Post eliminado' });
-  } catch {
+  } catch (err) {
+    console.error('[posts.remove]', err);
     res.status(500).json({ error: 'Error al eliminar post' });
   }
 };
@@ -210,7 +193,8 @@ const uploadImage = async (req, res) => {
 
     const imageUrl = `/uploads/posts/${req.file.filename}`;
     res.json({ image_url: imageUrl });
-  } catch {
+  } catch (err) {
+    console.error('[posts.uploadImage]', err);
     res.status(500).json({ error: 'Error al subir imagen' });
   }
 };

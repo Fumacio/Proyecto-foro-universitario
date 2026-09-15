@@ -1,11 +1,12 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const getAll = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM tags ORDER BY name');
     res.json(rows);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener tags' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener tags');
   }
 };
 
@@ -28,8 +29,8 @@ const create = async (req, res) => {
     );
 
     res.status(201).json({ id: result.insertId, name, color: color || '#F99B4A' });
-  } catch {
-    res.status(500).json({ error: 'Error al crear tag' });
+  } catch (err) {
+    sendError(res, err, 'Error al crear tag');
   }
 };
 
@@ -42,8 +43,8 @@ const remove = async (req, res) => {
     }
 
     res.json({ message: 'Tag eliminado' });
-  } catch {
-    res.status(500).json({ error: 'Error al eliminar tag' });
+  } catch (err) {
+    sendError(res, err, 'Error al eliminar tag');
   }
 };
 

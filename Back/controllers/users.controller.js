@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const getAll = async (req, res) => {
   try {
@@ -6,8 +7,8 @@ const getAll = async (req, res) => {
       'SELECT u.id, u.username, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.email, u.avatar_url, u.bio, r.name AS role, u.created_at FROM users u JOIN roles r ON u.role_id = r.id'
     );
     res.json(rows);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener usuarios' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener usuarios');
   }
 };
 
@@ -31,8 +32,8 @@ const getById = async (req, res) => {
     }
 
     res.json(user);
-  } catch {
-    res.status(500).json({ error: 'Error al obtener usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener usuario');
   }
 };
 
@@ -54,8 +55,8 @@ const update = async (req, res) => {
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
 
     res.json({ message: 'Usuario actualizado' });
-  } catch {
-    res.status(500).json({ error: 'Error al actualizar usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al actualizar usuario');
   }
 };
 
@@ -68,8 +69,8 @@ const remove = async (req, res) => {
     }
 
     res.json({ message: 'Usuario eliminado' });
-  } catch {
-    res.status(500).json({ error: 'Error al eliminar usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al eliminar usuario');
   }
 };
 
@@ -83,8 +84,8 @@ const uploadAvatar = async (req, res) => {
     await pool.query('UPDATE users SET avatar_url = ? WHERE id = ?', [avatarUrl, req.user.id]);
 
     res.json({ avatar_url: avatarUrl });
-  } catch {
-    res.status(500).json({ error: 'Error al subir avatar' });
+  } catch (err) {
+    sendError(res, err, 'Error al subir avatar');
   }
 };
 
@@ -107,8 +108,8 @@ const getStats = async (req, res) => {
       comments: commentsRow.total,
       karma: Number(karmaRow.total)
     });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener estadísticas' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener estadísticas');
   }
 };
 
@@ -135,8 +136,8 @@ const getActivity = async (req, res) => {
     );
 
     res.json({ posts, comments });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener actividad' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener actividad');
   }
 };
 
@@ -159,8 +160,8 @@ const findByEmail = async (req, res) => {
     }
 
     res.json(rows[0]);
-  } catch {
-    res.status(500).json({ error: 'Error al buscar usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al buscar usuario');
   }
 };
 

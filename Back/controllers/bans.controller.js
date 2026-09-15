@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const banUser = async (req, res) => {
   try {
@@ -51,8 +52,8 @@ const banUser = async (req, res) => {
         ? 'Usuario baneado permanentemente'
         : `Usuario baneado por ${duration_hours} horas`
     });
-  } catch {
-    res.status(500).json({ error: 'Error al banear usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al banear usuario');
   }
 };
 
@@ -76,8 +77,8 @@ const unbanUser = async (req, res) => {
     }
 
     res.json({ message: 'Usuario desbaneado correctamente' });
-  } catch {
-    res.status(500).json({ error: 'Error al desbanear usuario' });
+  } catch (err) {
+    sendError(res, err, 'Error al desbanear usuario');
   }
 };
 
@@ -99,8 +100,8 @@ const getBans = async (req, res) => {
     );
 
     res.json({ active, expired });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener bans' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener bans');
   }
 };
 
@@ -117,8 +118,8 @@ const getBanStatus = async (req, res) => {
     );
 
     res.json({ banned: bans.length > 0, ban: bans[0] || null });
-  } catch {
-    res.status(500).json({ error: 'Error al obtener estado de ban' });
+  } catch (err) {
+    sendError(res, err, 'Error al obtener estado de ban');
   }
 };
 
