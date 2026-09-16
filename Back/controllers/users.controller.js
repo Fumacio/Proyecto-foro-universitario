@@ -43,9 +43,28 @@ const update = async (req, res) => {
     const fields = [];
     const values = [];
 
-    if (username) { fields.push('username = ?'); values.push(username); }
-    if (email) { fields.push('email = ?'); values.push(email); }
-    if (role_id) { fields.push('role_id = ?'); values.push(role_id); }
+    if (username) {
+      if (username.length < 3 || username.length > 30) {
+        return res.status(400).json({ error: 'El username debe tener entre 3 y 30 caracteres' });
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        return res.status(400).json({ error: 'El username solo puede contener letras, números y guiones bajos' });
+      }
+      fields.push('username = ?'); values.push(username);
+    }
+    if (email) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'El formato del email no es válido' });
+      }
+      fields.push('email = ?'); values.push(email);
+    }
+    if (role_id) {
+      const [validRoles] = await pool.query('SELECT id FROM roles WHERE id = ?', [role_id]);
+      if (validRoles.length === 0) {
+        return res.status(400).json({ error: 'El role_id no es válido' });
+      }
+      fields.push('role_id = ?'); values.push(role_id);
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ error: 'No hay campos para actualizar' });

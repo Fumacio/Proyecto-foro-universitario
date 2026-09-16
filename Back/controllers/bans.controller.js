@@ -17,6 +17,10 @@ const banUser = async (req, res) => {
       return res.status(400).json({ error: 'Los bans temporales requieren duration_hours' });
     }
 
+    if (type === 'temporary' && (!Number.isInteger(duration_hours) || duration_hours <= 0)) {
+      return res.status(400).json({ error: 'duration_hours debe ser un entero positivo' });
+    }
+
     const [user] = await pool.query('SELECT id, role_id FROM users WHERE id = ?', [user_id]);
     if (user.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado' });

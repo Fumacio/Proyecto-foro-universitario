@@ -13,6 +13,26 @@ const register = async (req, res) => {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
     }
 
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
+    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return res.status(400).json({ error: 'La contraseña debe contener al menos una mayúscula, un número y un símbolo' });
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({ error: 'El username debe tener entre 3 y 30 caracteres' });
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return res.status(400).json({ error: 'El username solo puede contener letras, números y guiones bajos' });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'El formato del email no es válido' });
+    }
+
     const [existing] = await pool.query(
       'SELECT id FROM users WHERE email = ? OR username = ?',
       [email, username]
@@ -31,7 +51,8 @@ const register = async (req, res) => {
 
     const token = jwt.sign(
       { id: result.insertId, username, role: 'alumno', token_version: 1 },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
     res.status(201).json({ token, user: { id: result.insertId, username, email, role: 'alumno', first_name, last_name, age, commission, career, gender, bio: bio || null } });
@@ -66,7 +87,8 @@ const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, token_version: user.token_version },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url, first_name: user.first_name, last_name: user.last_name, age: user.age, commission: user.commission, career: user.career, gender: user.gender, bio: user.bio } });
@@ -140,14 +162,15 @@ const updateProfile = async (req, res) => {
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
 
     const [updated] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
+      'SELECT u.id, u.username, u.email, u.avatar_url, u.token_version, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
       [userId]
     );
 
     const updatedUser = updated[0];
     const token = jwt.sign(
       { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, token_version: updatedUser.token_version || 1 },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
     );
 
     res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url, first_name: updatedUser.first_name, last_name: updatedUser.last_name, age: updatedUser.age, commission: updatedUser.commission, career: updatedUser.career, gender: updatedUser.gender, bio: updatedUser.bio } });
@@ -212,8 +235,12 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ error: 'Token y contraseña son obligatorios' });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    }
+
+    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return res.status(400).json({ error: 'La contraseña debe contener al menos una mayúscula, un número y un símbolo' });
     }
 
     const [rows] = await pool.query(

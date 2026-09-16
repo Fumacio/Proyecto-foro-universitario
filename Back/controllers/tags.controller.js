@@ -18,6 +18,14 @@ const create = async (req, res) => {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
 
+    if (name.length > 50) {
+      return res.status(400).json({ error: 'El nombre del tag no puede superar los 50 caracteres' });
+    }
+
+    if (color && !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+      return res.status(400).json({ error: 'El color debe ser un código hex válido (ej: #FF5733)' });
+    }
+
     const [existing] = await pool.query('SELECT id FROM tags WHERE name = ?', [name]);
     if (existing.length > 0) {
       return res.status(409).json({ error: 'El tag ya existe' });

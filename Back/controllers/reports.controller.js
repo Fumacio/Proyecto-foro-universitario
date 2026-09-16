@@ -39,8 +39,11 @@ const createReport = async (req, res) => {
     const [existing] = await pool.query(
       `SELECT id FROM reports
        WHERE reporter_id = ? AND status = 'pending'
-       AND ((post_id = ? AND ? IS NOT NULL) OR (comment_id = ? AND ? IS NOT NULL))`,
-      [req.user.id, post_id || null, post_id || null, comment_id || null, comment_id || null]
+       AND (
+         (post_id IS NOT NULL AND post_id = ?) OR
+         (comment_id IS NOT NULL AND comment_id = ?)
+       )`,
+      [req.user.id, post_id || 0, comment_id || 0]
     );
 
     if (existing.length > 0) {

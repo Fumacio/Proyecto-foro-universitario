@@ -58,16 +58,19 @@ async function loadTags() {
     const tags = await api.get('/tags');
     const container = document.getElementById('tag-selector');
     if (container) {
-      container.innerHTML = tags.map(t =>
-        `<label class="inline-flex items-center gap-1 text-xs cursor-pointer">
+      container.innerHTML = tags.map(t => {
+        const safeColor = /^#[0-9A-Fa-f]{6}$/.test(t.color) ? t.color : '#F99B4A';
+        return `<label class="inline-flex items-center gap-1 text-xs cursor-pointer">
           <input type="checkbox" name="tag_ids" value="${t.id}" class="hidden peer">
           <span class="rounded-full px-2 py-0.5 transition-all"
-                style="background-color: ${t.color}22; color: ${t.color}; border: 1px solid ${t.color}44"
-                onclick="this.previousElementSibling.checked ? this.style.boxShadow='0 0 0 2px ${t.color}' : this.style.boxShadow=''">${escapeHtml(t.name)}</span>
-        </label>`
-      ).join('');
+                style="background-color: ${safeColor}22; color: ${safeColor}; border: 1px solid ${safeColor}44"
+                onclick="this.previousElementSibling.checked ? this.style.boxShadow='0 0 0 2px ${safeColor}' : this.style.boxShadow=''">${escapeHtml(t.name)}</span>
+        </label>`;
+      }).join('');
     }
-  } catch {}
+  } catch (err) {
+    console.warn('Error loading tags:', err);
+  }
 }
 
 async function loadSidebarTags() {
@@ -87,7 +90,9 @@ async function loadSidebarTags() {
           </label>
       `).join('')}
     `;
-  } catch {}
+  } catch (err) {
+    console.warn('Error loading sidebar tags:', err);
+  }
 }
 
 function filterByTag(tagId) {
@@ -238,7 +243,7 @@ async function uploadPostImage(e) {
     if (!res.ok) throw data;
 
     pendingImageUrl = data.image_url;
-    document.getElementById('image-preview').innerHTML = `<img src="${data.image_url}" alt="Preview" class="rounded max-h-32 object-cover">`;
+    document.getElementById('image-preview').innerHTML = `<img src="${escapeHtml(data.image_url)}" alt="Preview" class="rounded max-h-32 object-cover">`;
   } catch (err) {
     alert(err.error || 'Error al subir imagen');
   }

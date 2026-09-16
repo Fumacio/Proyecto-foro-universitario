@@ -19,8 +19,13 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 // CORS restringido al frontend
+const frontendUrl = process.env.FRONTEND_URL;
+if (!frontendUrl && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: FRONTEND_URL no está configurado en .env');
+  process.exit(1);
+}
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: frontendUrl || 'http://localhost:3000',
   credentials: true
 }));
 
@@ -51,7 +56,25 @@ const forgotPasswordLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes de recuperación, esperá 1 hora' }
 });
 
-app.use(express.json());
+// Rate limiting para votos (por usuario)
+const voteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 30, // 30 votos por minuto
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados votos, esperá un momento' }
+});
+
+app.use(express.json({ limit: '1mb' }));
+
+// Headers de seguridad
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 app.use(express.static(path.join(__dirname, '..', 'Front')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -59,6 +82,8 @@ app.use('/api', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+app.use('/api/posts', voteLimiter);
+app.use('/api/comments', voteLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/categories', categoriesRoutes);

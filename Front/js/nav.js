@@ -11,7 +11,9 @@ async function renderNav() {
         window.location.href = '/banned.html';
         return;
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Error checking ban status:', err);
+    }
   }
 
   let html = `
@@ -25,9 +27,9 @@ async function renderNav() {
     html += `
       <a href="/profile.html" class="flex items-center gap-2 text-sm" style="color: #ffffff; opacity: 0.85">
         ${renderAvatar(user.avatar_url, user.username, 7)}
-        ${user.username}
+        ${escapeHtml(user.username)}
       </a>
-      <span class="text-xs badge-${user.role} px-2 py-0.5 rounded-full">${user.role}</span>
+      <span class="text-xs badge-${escapeHtml(user.role)} px-2 py-0.5 rounded-full">${escapeHtml(user.role)}</span>
       ${user.role === 'admin' ? '<a href="/admin.html" class="text-sm" style="color: var(--orange)">Admin</a>' : ''}
       <button onclick="logout()" class="text-sm" style="color: var(--orange)">Salir</button>
     `;

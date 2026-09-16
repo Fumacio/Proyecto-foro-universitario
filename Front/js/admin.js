@@ -191,7 +191,7 @@ async function loadUsers(container) {
                 <td class="p-3">
                   <div class="flex items-center gap-2">
                     ${u.avatar_url
-                      ? `<img src="${u.avatar_url}" class="w-6 h-6 rounded-full object-cover">`
+                      ? `<img src="${escapeHtml(u.avatar_url)}" class="w-6 h-6 rounded-full object-cover">`
                       : `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background-color: var(--orange-light); color: var(--orange)">${escapeHtml(u.username.charAt(0).toUpperCase())}</div>`
                     }
                     <a href="/profile.html?user_id=${u.id}" class="text-primary link-theme hover:underline">${escapeHtml(u.username)}</a>
@@ -206,7 +206,7 @@ async function loadUsers(container) {
                     <option value="2" ${u.role === 'profesor' ? 'selected' : ''}>profesor</option>
                     <option value="1" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
                   </select>
-                  <button onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')" class="ml-2 text-xs px-2 py-1 rounded" style="color: var(--red); background-color: var(--red-light)">Eliminar</button>
+                  <button onclick="deleteUser(${u.id}, this.dataset.username)" data-username="${escapeHtml(u.username)}" class="ml-2 text-xs px-2 py-1 rounded" style="color: var(--red); background-color: var(--red-light)">Eliminar</button>
                 </td>
               </tr>
             `).join('')}
@@ -270,7 +270,7 @@ async function loadCategories(container) {
                 <td class="p-3 text-secondary text-xs">${escapeHtml(c.description || '-')}</td>
                 <td class="p-3 text-muted">${c.subcategories ? c.subcategories.length : 0}</td>
                 <td class="p-3 text-right">
-                  <button onclick="deleteCategory(${c.id}, '${escapeHtml(c.name)}')" class="text-xs px-2 py-1 rounded" style="color: var(--red); background-color: var(--red-light)">Eliminar</button>
+                  <button onclick="deleteCategory(${c.id}, this.dataset.catname)" data-catname="${escapeHtml(c.name)}" class="text-xs px-2 py-1 rounded" style="color: var(--red); background-color: var(--red-light)">Eliminar</button>
                 </td>
               </tr>
             `).join('')}
@@ -329,13 +329,15 @@ async function loadTags(container) {
         <h3 class="text-lg font-semibold text-primary">${tags.length} tags</h3>
       </div>
       <div class="p-4 flex flex-wrap gap-2">
-        ${tags.map(t => `
+        ${tags.map(t => {
+          const safeColor = /^#[0-9A-Fa-f]{6}$/.test(t.color) ? t.color : '#F99B4A';
+          return `
           <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm" style="background-color: var(--bg-input); border: 1px solid var(--border)">
-            <span class="w-3 h-3 rounded-full" style="background-color: ${escapeHtml(t.color)}"></span>
+            <span class="w-3 h-3 rounded-full" style="background-color: ${safeColor}"></span>
             <span class="text-primary">${escapeHtml(t.name)}</span>
-            <button onclick="deleteTag(${t.id}, '${escapeHtml(t.name)}')" class="text-muted hover:text-secondary text-xs ml-1">&times;</button>
-          </div>
-        `).join('')}
+            <button onclick="deleteTag(${t.id}, this.dataset.name)" data-name="${escapeHtml(t.name)}" class="text-muted hover:text-secondary text-xs ml-1">&times;</button>
+          </div>`;
+        }).join('')}
       </div>
     </div>
   `;
@@ -603,7 +605,8 @@ async function lookupUser() {
       hiddenId.value = user.id;
       btnBan.disabled = false;
     }
-  } catch {
+  } catch (err) {
+    console.warn('Error looking up user:', err);
     preview.classList.remove('hidden');
     preview.innerHTML = '<span style="color: var(--red)">No se encontró usuario con ese email</span>';
     hiddenId.value = '';

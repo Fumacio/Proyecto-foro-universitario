@@ -67,14 +67,26 @@ function closeLoginPrompt() {
 }
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeTextarea(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function renderAvatar(url, username, size = 9) {
   if (url) {
-    return `<img src="${url}" alt="" class="w-${size} h-${size} rounded-full object-cover">`;
+    const safeUrl = /^https?:\/\//.test(url) ? url : '';
+    if (safeUrl) {
+      return `<img src="${escapeHtml(safeUrl)}" alt="" class="w-${size} h-${size} rounded-full object-cover">`;
+    }
   }
   return `<div class="w-${size} h-${size} rounded-full flex items-center justify-center text-sm font-bold" style="background-color: var(--orange-light); color: var(--orange)">${escapeHtml(username.charAt(0).toUpperCase())}</div>`;
 }
@@ -125,7 +137,7 @@ function renderPostCard(post) {
             <span>${new Date(post.created_at).toLocaleDateString('es-AR')}</span>
             ${post.category_name ? `<a href="/posts.html?category_id=${post.category_id}" class="link-theme hover:underline">${escapeHtml(post.category_name)}</a>` : ''}
             ${post.comment_count !== undefined ? `<span>${post.comment_count} comentarios</span>` : ''}
-            ${post.tags && post.tags.length > 0 ? `<span class="flex items-center gap-1">${post.tags.map(t => `<span class="inline-block px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${t.color}15; color: ${t.color}">${escapeHtml(t.name)}</span>`).join('')}</span>` : ''}
+            ${post.tags && post.tags.length > 0 ? `<span class="flex items-center gap-1">${post.tags.map(t => { const safeColor = /^#[0-9A-Fa-f]{6}$/.test(t.color) ? t.color : '#F99B4A'; return `<span class="inline-block px-1.5 py-0.5 rounded text-[10px]" style="background-color: ${safeColor}15; color: ${safeColor}">${escapeHtml(t.name)}</span>`; }).join('')}</span>` : ''}
           </div>
         </div>
         <div class="text-right ml-4 flex-shrink-0">

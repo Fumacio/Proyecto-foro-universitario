@@ -3,9 +3,10 @@ let commentsLoaded = false;
 
 function renderTagsHtml(tags) {
   if (!tags || tags.length === 0) return '';
-  return tags.map(t =>
-    `<span class="inline-block text-xs px-2 py-0.5 rounded-full" style="background-color: ${t.color}22; color: ${t.color}; border: 1px solid ${t.color}44">${escapeHtml(t.name)}</span>`
-  ).join(' ');
+  return tags.map(t => {
+    const safeColor = /^#[0-9A-Fa-f]{6}$/.test(t.color) ? t.color : '#F99B4A';
+    return `<span class="inline-block text-xs px-2 py-0.5 rounded-full" style="background-color: ${safeColor}22; color: ${safeColor}; border: 1px solid ${safeColor}44">${escapeHtml(t.name)}</span>`;
+  }).join(' ');
 }
 
 function getPostId() {
@@ -134,7 +135,7 @@ async function loadPost() {
     const canReport = user && user.id !== post.user_id;
 
     const avatarHtml = post.avatar_url
-      ? `<img src="${post.avatar_url}" alt="" class="w-6 h-6 rounded-full object-cover inline-block">`
+      ? `<img src="${escapeHtml(post.avatar_url)}" alt="" class="w-6 h-6 rounded-full object-cover inline-block">`
       : '';
 
     container.innerHTML = `
@@ -159,7 +160,7 @@ async function loadPost() {
             ` : ''}
           </div>
         </div>
-        ${post.image_url ? `<img src="${post.image_url}" alt="Imagen del post" class="rounded-lg max-h-96 object-contain mb-4" onerror="this.remove()">` : ''}
+        ${post.image_url ? `<img src="${escapeHtml(post.image_url)}" alt="Imagen del post" class="rounded-lg max-h-96 object-contain mb-4" onerror="this.remove()">` : ''}
         <div class="text-secondary whitespace-pre-wrap">${escapeHtml(post.content)}</div>
         <div id="edit-post-form" class="hidden mt-4">
           <form onsubmit="submitEditPost(event)" class="space-y-3">
@@ -187,7 +188,8 @@ async function loadPost() {
         </div>
       </div>
     `;
-  } catch {
+  } catch (err) {
+    console.warn('Error loading post:', err);
     container.innerHTML = '<p style="color: var(--red)">Error al cargar el post</p>';
   }
 }
@@ -205,7 +207,8 @@ async function loadComments() {
     }
 
     container.innerHTML = comments.map(c => renderComment(c)).join('');
-  } catch {
+  } catch (err) {
+    console.warn('Error loading comments:', err);
     container.innerHTML = '<p style="color: var(--red)">Error al cargar comentarios</p>';
   }
 }
@@ -216,7 +219,7 @@ function renderComment(comment) {
   const canReport = user && user.id !== comment.user_id;
 
   const avatarHtml = comment.avatar_url
-    ? `<img src="${comment.avatar_url}" alt="" class="w-5 h-5 rounded-full object-cover inline-block">`
+    ? `<img src="${escapeHtml(comment.avatar_url)}" alt="" class="w-5 h-5 rounded-full object-cover inline-block">`
     : '';
 
   const card = `

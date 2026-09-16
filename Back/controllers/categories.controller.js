@@ -50,6 +50,14 @@ const create = async (req, res) => {
       return res.status(400).json({ error: 'El nombre es obligatorio' });
     }
 
+    if (name.length > 100) {
+      return res.status(400).json({ error: 'El nombre no puede superar los 100 caracteres' });
+    }
+
+    if (description && description.length > 500) {
+      return res.status(400).json({ error: 'La descripción no puede superar los 500 caracteres' });
+    }
+
     const [result] = await pool.query(
       'INSERT INTO categories (name, description, parent_id) VALUES (?, ?, ?)',
       [name, description || null, parent_id || null]

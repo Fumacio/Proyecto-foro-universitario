@@ -48,9 +48,20 @@ const create = async (req, res) => {
       return res.status(400).json({ error: 'El contenido es obligatorio' });
     }
 
+    if (content.length > 5000) {
+      return res.status(400).json({ error: 'El contenido no puede superar los 5,000 caracteres' });
+    }
+
     const [post] = await pool.query('SELECT id FROM posts WHERE id = ?', [postId]);
     if (post.length === 0) {
       return res.status(404).json({ error: 'Post no encontrado' });
+    }
+
+    if (parent_id) {
+      const [parentComment] = await pool.query('SELECT id FROM comments WHERE id = ? AND post_id = ?', [parent_id, postId]);
+      if (parentComment.length === 0) {
+        return res.status(400).json({ error: 'El comentario padre no pertenece a este post' });
+      }
     }
 
     const [result] = await pool.query(

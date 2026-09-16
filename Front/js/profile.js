@@ -26,7 +26,7 @@ async function loadProfile() {
     }
 
     const avatarHtml = data.avatar_url
-      ? `<img src="${data.avatar_url}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
+      ? `<img src="${escapeHtml(data.avatar_url)}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
       : `<div class="w-16 h-16 rounded-full flex items-center justify-center" style="background-color: var(--orange-light)">
            <span class="text-2xl font-bold" style="color: var(--orange)">${escapeHtml(data.username.charAt(0).toUpperCase())}</span>
          </div>`;
@@ -257,7 +257,8 @@ async function loadProfile() {
         </div>
       ` : ''}
     `;
-  } catch {
+  } catch (err) {
+    console.warn('Error loading profile:', err);
     container.innerHTML = '<p style="color: var(--red)">Error al cargar el perfil</p>';
   }
 }

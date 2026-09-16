@@ -1,4 +1,5 @@
 const pool = require('../db/connection');
+const { sendError } = require('../utils/response.utils');
 
 const checkBan = async (req, res, next) => {
   try {
@@ -24,8 +25,8 @@ const checkBan = async (req, res, next) => {
     }
 
     next();
-  } catch {
-    res.status(500).json({ error: 'Error al verificar estado de cuenta' });
+  } catch (err) {
+    sendError(res, err, 'Error al verificar estado de cuenta');
   }
 };
 

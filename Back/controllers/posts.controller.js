@@ -1,5 +1,6 @@
 const pool = require('../db/connection');
 const { saveTags, getTagsByPostIds } = require('../utils/post.utils');
+const { sendError } = require('../utils/response.utils');
 
 const getAll = async (req, res) => {
   try {
@@ -70,8 +71,7 @@ const getAll = async (req, res) => {
       pages: Math.ceil(total / limitNum)
     });
   } catch (err) {
-    console.error('[posts.getAll]', err);
-    res.status(500).json({ error: 'Error al obtener posts' });
+    sendError(res, err, 'Error al obtener posts');
   }
 };
 
@@ -94,8 +94,7 @@ const getById = async (req, res) => {
     const tagsMap = await getTagsByPostIds([rows[0].id]);
     res.json({ ...rows[0], tags: tagsMap[rows[0].id] || [] });
   } catch (err) {
-    console.error('[posts.getById]', err);
-    res.status(500).json({ error: 'Error al obtener post' });
+    sendError(res, err, 'Error al obtener post');
   }
 };
 
@@ -105,6 +104,19 @@ const create = async (req, res) => {
 
     if (!title || !content || !category_id) {
       return res.status(400).json({ error: 'Faltan campos obligatorios (title, content, category_id)' });
+    }
+
+    if (title.length > 200) {
+      return res.status(400).json({ error: 'El título no puede superar los 200 caracteres' });
+    }
+
+    if (content.length > 10000) {
+      return res.status(400).json({ error: 'El contenido no puede superar los 10,000 caracteres' });
+    }
+
+    const [catExists] = await pool.query('SELECT id FROM categories WHERE id = ?', [category_id]);
+    if (catExists.length === 0) {
+      return res.status(400).json({ error: 'La categoría especificada no existe' });
     }
 
     const [result] = await pool.query(
@@ -118,8 +130,7 @@ const create = async (req, res) => {
 
     res.status(201).json({ id: result.insertId, title, content, category_id, image_url: image_url || null });
   } catch (err) {
-    console.error('[posts.create]', err);
-    res.status(500).json({ error: 'Error al crear post' });
+    sendError(res, err, 'Error al crear post');
   }
 };
 
@@ -160,8 +171,7 @@ const update = async (req, res) => {
 
     res.json({ message: 'Post actualizado' });
   } catch (err) {
-    console.error('[posts.update]', err);
-    res.status(500).json({ error: 'Error al actualizar post' });
+    sendError(res, err, 'Error al actualizar post');
   }
 };
 
@@ -180,8 +190,7 @@ const remove = async (req, res) => {
     await pool.query('DELETE FROM posts WHERE id = ?', [req.params.id]);
     res.json({ message: 'Post eliminado' });
   } catch (err) {
-    console.error('[posts.remove]', err);
-    res.status(500).json({ error: 'Error al eliminar post' });
+    sendError(res, err, 'Error al eliminar post');
   }
 };
 
@@ -194,8 +203,7 @@ const uploadImage = async (req, res) => {
     const imageUrl = `/uploads/posts/${req.file.filename}`;
     res.json({ image_url: imageUrl });
   } catch (err) {
-    console.error('[posts.uploadImage]', err);
-    res.status(500).json({ error: 'Error al subir imagen' });
+    sendError(res, err, 'Error al subir imagen');
   }
 };
 
