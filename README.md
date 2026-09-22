@@ -1,98 +1,212 @@
-# Foro Universitario - UTN FRT
+<div align="center">
 
-Foro academico para la comunidad de la UTN FRT.
+# 🎓 Foro Universitario — UTN FRT
 
-## Caracteristicas Principales
-- Autenticacion segura (JWT).
-- Sistema de posts, comentarios y votos.
-- Moderacion: Reportes y sistema de bans.
-- Perfiles de usuario y gestion de cuenta.
-- Panel de administracion.
+**Foro académico para la comunidad de la Facultad Regional Tucumán**  
+Ideas · apuntes · consultas de parcial · material de clase
 
-## Tecnologias
-- Backend: Node.js, Express, MySQL.
-- Frontend: HTML/CSS/JS (Vanilla).
+[![Node](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-5-000000?logo=express)](https://expressjs.com/)
+[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![Zod](https://img.shields.io/badge/validation-Zod-3068B7?logo=zod&logoColor=white)](https://zod.dev/)
+[![JWT](https://img.shields.io/badge/auth-JWT-black?logo=json-web-tokens)](https://jwt.io/)
+[![Tests](https://img.shields.io/badge/tests-22%20passed-brightgreen)](#-cómo-probarlo)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
-## Configuracion
-1. Clonar el repositorio.
-2. Instalar dependencias: `npm install`.
-3. Configurar `.env` basado en `.env.example`.
-4. Ejecutar: `npm run dev`.
+**Status:** FASE 1 (seguridad) ✅ · FASE 2 (vista Reddit) ⏳
+
+</div>
 
 ---
 
-## Pendientes - Seguridad
+<div align="center">
 
-### CRITICO
+### ✨ Por qué este foro
 
-| # | Archivo | Problema | Fix |
-|---|---------|----------|-----|
-| 1 | `Back/controllers/auth.controller.js:32-35, 67-70` | JWT sin `expiresIn` — tokens validos para siempre. Si se roba un token, funciona eternamente. | Agregar `{ expiresIn: '24h' }` a todos los `jwt.sign()` |
-| 2 | `Back/.env` commiteado en historial de Git | Secretos expuestos en commit `cb92006` (DB_PASS, JWT_SECRET) | Rotar todos los secretos y limpiar historial con `git filter-branch` |
+|  |  |
+|:--:|:--:|
+| 🔐 **Seguridad primero** | Zod en cada ruta · helmet · JWT + invalidación de sesión · logs seguros |
+| 💬 **Discusión real** | Posts, hilos de comentarios, votos tipo karma, tags y categorías |
+| 🛡 **Moderación** | Reportes, bans temporales/permanentes, panel de admin |
+| 🚀 **Sin frameworks en el front** | HTML/CSS/JS vanilla — fácil de leer y de llevar a producción |
 
-### ALTO
-
-| # | Archivo | Problema | Fix |
-|---|---------|----------|-----|
-| 3 | `Back/controllers/auth.controller.js:10-14` | Registro sin validacion de email, largo de password, ni formato de username | Agregar validacion con `joi` o `express-validator` |
-| 4 | `Back/controllers/auth.controller.js:148-151` | `updateProfile` genera JWT sin `token_version` actualizado de DB | Seleccionar `token_version` en la query del UPDATE |
-| 5 | `Back/controllers/users.controller.js:40-48` | Admin puede setear `role_id` invalido (no existe en tabla roles) | Validar que `role_id` exista en la tabla `roles` antes del UPDATE |
-| 6 | `Back/controllers/auth.controller.js:215` | Password minimo debil — solo 6 chars, sin complejidad | Requerir minimo 8 chars, mayuscula, numero y simbolo |
-
-### MEDIO
-
-| # | Archivo | Problema | Fix |
-|---|---------|----------|-----|
-| 7 | `Front/js/nav.js:29` | XSS via `user.username` inyectado sin `escapeHtml()` | Usar `renderAvatar()` de `api.js` que ya escapa |
-| 8 | `Front/js/posts.js:66` | XSS via `t.color` en inline style y onclick sin sanitizar | Validar formato hex color en backend y frontend |
-| 9 | `Back/controllers/posts.controller.js` | Sin validacion de largo de `title`/`content` ni existencia de `category_id` | Agregar validacion de longitudes y verificar category_id en DB |
-| 10 | `Back/controllers/comments.controller.js` | Sin validacion de largo de `content` ni que `parent_id` pertenezca al post | Agregar validacion de longitudes y verificar parent_id |
-| 11 | `Back/controllers/bans.controller.js:16-18` | `duration_hours` no valida que sea entero positivo | Validar `duration_hours > 0` y que sea entero |
-| 12 | `Back/routes/votes.routes.js` | Sin rate limiting dedicado en votos | Agregar rate limiting por usuario |
-| 13 | `Back/routes/posts.routes.js:10` | Upload de imagen sin rate limiting | Agregar rate limiting en uploads |
-| 14 | `Back/routes/users.routes.js:13` | Upload de avatar sin rate limiting | Agregar rate limiting en uploads |
-| 15 | `Back/middleware/errorHandler.js:2` | `console.error` loguea objeto completo del error (puede contener queries SQL, paths internos) | En produccion, loguear solo mensaje y ID, no el objeto completo |
-| 16 | `Back/utils/response.utils.js:2` | Mismo problema — loguea el objeto `err` completo | Sanitizar logs en produccion |
-| 17 | `Back/server.js` | CORS con fallback a `localhost:3000` en produccion si `FRONTEND_URL` no esta seteado | Requerir `FRONTEND_URL` en produccion, lanzar error si falta |
-
-### BAJO
-
-| # | Archivo | Problema | Fix |
-|---|---------|----------|-----|
-| 18 | `Back/middleware/auth.js:17-19` | Query a DB en cada request autenticada para verificar `token_version` | Considerar cache con TTL corto |
-| 19 | `Back/controllers/categories.controller.js` | Sin validacion de largo de `name`/`description` | Agregar limites de longitud |
-| 20 | `Back/controllers/tags.controller.js` | Sin validacion de largo de `name` ni formato de `color` | Validar nombre (max 50) y color (regex hex) |
-| 21 | `Back/controllers/posts.controller.js` | `console.error` con objeto completo del error en multiples places | Sanitizar logs |
+</div>
 
 ---
 
-## Completado
+## 📸 Capturas
 
-### Seguridad aplicada
-- JWT con `token_version` para invalidacion al cambiar contrasena
-- CORS restringido a `FRONTEND_URL`
-- Rate limiting en login, registro y forgot-password
-- Middleware de ban que bloquea acciones de usuarios baneados
-- Uploads con validacion MIME type, extension y tamaño maximo
-- Filenames aleatorios via `crypto.randomBytes`
-- Password hasheado con `bcrypt` (10 rounds)
-- Login con campos explicitos (no expone hash innecesariamente)
-- Middleware de error global
+<div align="center">
+  <p><em>Próximamente — Fase 2 (rediseño estilo Reddit).</em></p>
+</div>
 
-### Backend
-- 10 controladores refactorizados con `sendError` centralizado
-- Utilidades compartidas: `post.utils.js`, `tree.utils.js`, `response.utils.js`
-- Migraciones eliminadas de `server.js` (solo usa `schema.sql`)
+---
 
-### Frontend
-- Funciones compartidas en `api.js`: `renderAvatar`, `renderPostCard`, `renderPagination`
-- Eliminacion de codigo duplicado en `index.js`, `posts.js`, `nav.js`
-- `escapeHtml` para prevencion de XSS
+## ✨ Características
 
-### Funcionalidad
-- Sistema de registro y login con JWT
-- Recuperacion de contrasena por email
-- Sistema de reportes y bans
-- Panel de administracion
-- Perfiles de usuario con estadisticas
-- Busqueda con paginacion y filtros
+| Área | Qué incluye |
+|------|-------------|
+| **Cuenta** | Registro, login (JWT), recuperación de contraseña por email, perfil con bio/avatar, baja de cuenta |
+| **Contenido** | Posts con categoría (jerárquica) e imagen, comentarios anidados, tags |
+| **Votos** | Upvote / downvote en posts y comentarios (karma) |
+| **Búsqueda** | Filtros por categoría y tag, búsqueda por texto, orden (recientes / votos), paginación |
+| **Moderación** | Reportes (spam, abuso, off-topic…), bans, panel de admin |
+| **Roles** | `admin` · `moderador` · `alumno` con middleware de permisos |
+| **Admin** | Dashboard, usuarios, categorías, tags, reportes y bans |
+
+---
+
+## 🛠 Stack
+
+| Capa | Tecnología |
+|------|------------|
+| Backend | **Node.js** + **Express 5** (CommonJS) |
+| DB | **MySQL** (`mysql2`) |
+| Validación | **Zod** (body, query y params) |
+| Auth | **JWT** + `token_version` (invalida sesiones al cambiar contraseña) |
+| Front | HTML / CSS / JS **vanilla** |
+| Seguridad | `helmet` · `compression` · `cors` · `express-rate-limit` · `bcrypt` |
+| Tests | **Jest** |
+| Email | `nodemailer` (SMTP) |
+
+---
+
+## 🚀 Quick start
+
+```bash
+# 1. Clonar
+git clone https://github.com/Fumacio/Proyecto-foro-universitario.git
+cd Proyecto-foro-universitario
+npm install
+
+# 2. Base de datos
+mysql -u root -p < Back/db/schema.sql
+mysql -u root -p < Back/db/seed.sql
+
+# 3. Entorno
+cp .env.example .env
+# → editá .env (DB_*, JWT_SECRET, SMTP_*)
+
+# 4. Arrancar
+npm run dev
+# → http://localhost:3000
+
+# 5. Tests
+npm test
+```
+
+### Variables de entorno
+
+| Variable | Descripción |
+|----------|-------------|
+| `PORT` | Puerto del server (default `3000`) |
+| `FRONTEND_URL` | Origen CORS (default `http://localhost:3000`) |
+| `NODE_ENV` | `development` \| `production` |
+| `DB_HOST` / `DB_USER` / `DB_PASS` / `DB_NAME` | MySQL |
+| `JWT_SECRET` | Firme de tokens — **fuerte y nunca a Git** |
+| `SMTP_*` | Recuperación de contraseñas |
+
+> `.env` está en `.gitignore`; solo se versiona `.env.example`.  
+> El server carga el `.env` con path absoluto: funciona aunque lo lances desde otra carpeta.
+
+---
+
+## 📁 Estructura
+
+```
+├── Back/
+│   ├── server.js           # Express · helmet · CORS · rate limits · rutas
+│   ├── controllers/        # Lógica de endpoints
+│   ├── routes/             # Rutas + validación Zod
+│   ├── middleware/         # auth · ban · role · validate · upload · errorHandler
+│   ├── schemas/            # Schemas Zod (auth, posts, comments, …)
+│   ├── utils/              # errores tipados · mailer · helpers
+│   ├── db/                 # connection · schema.sql · seed.sql
+│   └── tests/              # Jest
+├── Front/
+│   ├── *.html              # index · posts · login · admin · profile…
+│   ├── js/                 # api · auth · nav · post(s) · admin
+│   └── css/theme.css
+├── .env.example
+└── package.json
+```
+
+---
+
+## 🔌 API
+
+Base: `/api`
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| POST | `/auth/register` · `/auth/login` | — | Cuenta / sesión |
+| POST | `/auth/forgot-password` · `/reset-password` | — | Recuperar contraseña |
+| GET/POST | `/posts` | parcial | Listar / crear posts |
+| GET/POST | `/posts/:postId/comments` | parcial | Comentarios |
+| PUT | `/posts/:id/vote` · `/comments/:id/vote` | ✅ | Votar |
+| GET/POST | `/categories` · `/tags` | admin (escritura) | Taxonomía |
+| POST | `/reports` | ✅ | Reportar |
+| GET/POST | `/bans` | admin | Bans |
+| GET | `/admin/dashboard` | admin | Métricas |
+
+**Errores:** `{ "error": "…" }` + status correcto (400 · 401 · 403 · 404 · 409 · 500).  
+En dev, los `AppError` pueden traer `details` (campo → mensaje Zod).
+
+---
+
+## 🔒 Seguridad
+
+### ✅ Aplicado (FASE 1)
+
+- **Zod** en los 10 routers (body, query, params)
+- **helmet** + **compression**
+- **AppError** / `errorHandler` global
+- **JWT_SECRET** rotado · `.env` fuera de Git · `.env.example` plantilla
+- **Logs seguros** en producción (sin stack ni queries)
+- Rate limiting (general + estricto en auth)
+- CORS → `FRONTEND_URL`
+- **`token_version`**: cambiar password cierra otras sesiones
+- **bcrypt** (10 rounds) · uploads seguros · middleware de ban
+- Front: **auto-logout** ante 401 de token inválido
+
+### ⏳ Pendiente / conocido
+
+- JWT sin `expiresIn` (decisión actual; candidato a refresh tokens — FEAT-06)
+- Rate limiting en uploads y votos
+- Política de contraseñas más exigente
+- CSP estricta en producción
+
+Plan completo: [`.opencode/PLAN.md`](.opencode/PLAN.md)
+
+---
+
+## 🗺 Roadmap
+
+| Fase | Contenido | Estado |
+|------|-----------|--------|
+| 0 | Descubrimiento | ✅ |
+| 1 | Seguridad base | ✅ |
+| 2 | Vista estilo Reddit | ⏳ **siguiente** |
+| 3 | Arquitectura (services / repos) | pendiente |
+| 4 | Tests de integración | pendiente |
+| 5 | Producto (notifs, etc.) | pendiente |
+| 6 | Deploy | pendiente |
+
+---
+
+## 🧪 Cómo probarlo
+
+1. Registro alumno → post → comentario → voto  
+2. Admin → Usuarios · Categorías · Tags · Reportes · Bans  
+3. Cambiá la contraseña → otras pestañas deben pedir login  
+4. Si rotás `JWT_SECRET`, volvé a iniciar sesión (el front te expulsa solo)
+
+---
+
+<div align="center">
+
+Hecho con Node · Express · MySQL · ❤ para la UTN FRT
+
+[![GitHub](https://img.shields.io/badge/GitHub-Fumacio%2FProyecto--foro--universitario-181717?logo=github)](https://github.com/Fumacio/Proyecto-foro-universitario)
+
+</div>
