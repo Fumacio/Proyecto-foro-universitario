@@ -14,14 +14,17 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
     "mysql2": "^3.23.3",
-    "nodemailer": "^9.0.6"
+    "nodemailer": "^9.0.6",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "jest": "^30.5.1",

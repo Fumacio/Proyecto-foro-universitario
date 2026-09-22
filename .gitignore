@@ -2,8 +2,10 @@ node_modules/
 .env
 Back/.env
 *.env
+!.env.example
 nul
 Back/uploads/avatars/*
 Back/uploads/posts/*
 !Back/uploads/avatars/.gitkeep
 !Back/uploads/posts/.gitkeep
+.opencode/node_modules/

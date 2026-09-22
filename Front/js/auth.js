@@ -4,6 +4,17 @@ function getReturnUrl() {
   return url || '/';
 }
 
+function showAuthMsgIfAny() {
+  const msg = sessionStorage.getItem('authMsg');
+  if (!msg) return;
+  sessionStorage.removeItem('authMsg');
+  const el = document.getElementById('msg');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = 'var(--red)';
+  }
+}
+
 function handleAuthSuccess(data) {
   localStorage.setItem('token', data.token);
   localStorage.setItem('user', JSON.stringify(data.user));
@@ -13,6 +24,8 @@ function handleAuthSuccess(data) {
 function initLoginForm() {
   const form = document.getElementById('login-form');
   if (!form) return;
+
+  showAuthMsgIfAny();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -36,6 +49,8 @@ function initLoginForm() {
 function initRegisterForm() {
   const form = document.getElementById('register-form');
   if (!form) return;
+
+  showAuthMsgIfAny();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

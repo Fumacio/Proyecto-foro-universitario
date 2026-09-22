@@ -1,12 +1,29 @@
 const API_BASE = '/api';
 
+// Errores del middleware de auth → la sesión ya no sirve (secret rotado, token viejo, expirado)
+function isSessionExpiredError(status, message) {
+  if (status !== 401) return false;
+  return /token|sesión expirada|sesion expirada/i.test(message || '');
+}
+
 async function request(endpoint, options = {}) {
   const token = localStorage.getItem('token');
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+
+  // Sesión inválida → limpiar y volver al login (evita quedarse "logueado" con token muerto)
+  if (token && isSessionExpiredError(res.status, data.error)) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    sessionStorage.setItem('authMsg', data.error || 'Tu sesión expiró. Iniciá sesión nuevamente.');
+    if (!window.location.pathname.includes('login')) {
+      window.location.href = '/login.html';
+    }
+    throw { status: res.status, ...data };
+  }
 
   if (!res.ok) throw { status: res.status, ...data };
   return data;

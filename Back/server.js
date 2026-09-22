@@ -1,7 +1,11 @@
-require('dotenv').config();
+// Cargar .env de la RAÍZ del proyecto siempre (independiente del cwd desde donde se lance)
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth.routes');
@@ -17,6 +21,13 @@ const bansRoutes = require('./routes/bans.routes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
+
+// Seguridad: headers HTTP (helmet) y compresión de respuestas
+app.use(helmet({
+  contentSecurityPolicy: false, // el front usa scripts inline; se endurece en deploy
+  crossOriginResourcePolicy: { policy: 'cross-origin' } // permite cargar /uploads
+}));
+app.use(compression());
 
 // CORS restringido al frontend
 app.use(cors({
