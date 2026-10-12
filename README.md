@@ -102,11 +102,15 @@ npm run make-admin -- tu@email.com
 npm test
 ```
 
-**¿Ya tenías la base creada con una versión anterior?** Corré la migración una vez:
+**¿Ya tenías la base creada con una versión anterior?** Corré las migraciones una vez, en orden:
 
 ```bash
 mysql -u root -p < Back/db/migrations/001_bans_banned_by_set_null.sql
+mysql -u root -p < Back/db/migrations/002_utf8mb4.sql
 ```
+
+La `002` pasa las tablas a `utf8mb4` (sin eso, un post con emoji da error en servidores en latin1, como XAMPP)
+y arregla las categorías y etiquetas que se ven como "FÃ­sica". Si tu base ya estaba bien, no cambia nada.
 
 **Estilos:** el front usa Tailwind compilado en `Front/css/tailwind.css` (ya viene generado).
 Si agregás clases nuevas de Tailwind en el HTML/JS, regeneralo con:
