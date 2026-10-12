@@ -82,9 +82,9 @@ git clone https://github.com/Fumacio/Proyecto-foro-universitario.git
 cd Proyecto-foro-universitario
 npm install
 
-# 2. Base de datos
-mysql -u root -p < Back/db/schema.sql
-mysql -u root -p < Back/db/seed.sql
+# 2. Base de datos (MySQL o MariaDB prendido; si usás XAMPP, Start en MySQL)
+mysql -u root -p -e "source Back/db/schema.sql"
+mysql -u root -p -e "source Back/db/seed.sql"
 
 # 3. Entorno
 cp .env.example .env
@@ -105,12 +105,16 @@ npm test
 **¿Ya tenías la base creada con una versión anterior?** Corré las migraciones una vez, en orden:
 
 ```bash
-mysql -u root -p < Back/db/migrations/001_bans_banned_by_set_null.sql
-mysql -u root -p < Back/db/migrations/002_utf8mb4.sql
+mysql -u root -p -e "source Back/db/migrations/001_bans_banned_by_set_null.sql"
+mysql -u root -p -e "source Back/db/migrations/002_utf8mb4.sql"
 ```
 
 La `002` pasa las tablas a `utf8mb4` (sin eso, un post con emoji da error en servidores en latin1, como XAMPP)
 y arregla las categorías y etiquetas que se ven como "FÃ­sica". Si tu base ya estaba bien, no cambia nada.
+
+**¿Windows?** Los comandos andan igual en la terminal de VS Code (PowerShell). Se usa `source` en vez de
+`mysql ... < archivo.sql` porque PowerShell no acepta `<`. Si `mysql` no se reconoce y usás XAMPP,
+reemplazalo por `C:\xampp\mysql\bin\mysql.exe`. Con XAMPP el root no tiene contraseña: cuando la pida, apretá Enter.
 
 **Estilos:** el front usa Tailwind compilado en `Front/css/tailwind.css` (ya viene generado).
 Si agregás clases nuevas de Tailwind en el HTML/JS, regeneralo con:
