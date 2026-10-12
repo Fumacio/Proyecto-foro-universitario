@@ -5,8 +5,9 @@
   "main": "Back/server.js",
   "scripts": {
     "start": "node Back/server.js",
-    "dev": "node Back/server.js",
-    "test": "jest"
+    "dev": "node --watch Back/server.js",
+    "test": "jest",
+    "make-admin": "node Back/scripts/make-admin.js"
   },
   "keywords": [],
   "author": "",
@@ -29,5 +30,8 @@
   "devDependencies": {
     "jest": "^30.5.1",
     "supertest": "^7.2.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

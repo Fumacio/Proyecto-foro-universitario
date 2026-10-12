@@ -18,6 +18,7 @@ const listPostsQuery = z.object({
 const tagIds = z
   .array(id, { error: 'tag_ids debe ser un array de IDs' })
   .max(10, 'Máximo 10 tags por post')
+  .transform((ids) => [...new Set(ids)])
   .optional();
 
 const createPostSchema = z.object({
@@ -32,7 +33,12 @@ const createPostSchema = z.object({
     .min(1, 'El contenido es obligatorio')
     .max(20000, 'El contenido no puede superar 20000 caracteres'),
   category_id: id,
-  image_url: z.string().trim().max(500, 'URL de imagen inválida').optional(),
+  // Solo imágenes subidas por /api/posts/upload-image (evita URLs externas o inyección en el <img>)
+  image_url: z
+    .string()
+    .regex(/^\/uploads\/posts\/[a-f0-9]{32}\.(jpg|png|gif|webp)$/, 'URL de imagen inválida')
+    .nullable()
+    .optional(),
   tag_ids: tagIds
 });
 
@@ -40,7 +46,7 @@ const updatePostSchema = z
   .object({
     title: z.string().trim().min(1, 'El título no puede estar vacío').max(200).optional(),
     content: z.string().trim().min(1, 'El contenido no puede estar vacío').max(20000).optional(),
-    tag_ids: z.array(id, { error: 'tag_ids debe ser un array de IDs' }).max(10, 'Máximo 10 tags por post').optional()
+    tag_ids: tagIds
   })
   .refine((data) => data.title !== undefined || data.content !== undefined || data.tag_ids !== undefined, {
     error: 'No hay campos para actualizar'

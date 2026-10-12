@@ -7,32 +7,31 @@ const getByPost = async (req, res) => {
     const { page = 1, limit = 50 } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
 
+    // Se traen todos los comentarios del post y se pagina por hilo (comentario raíz).
+    // Paginar las filas sueltas cortaba los árboles: una respuesta cuyo padre quedaba
+    // en otra página desaparecía.
     const [rows] = await pool.query(
       `SELECT cm.*, u.username, u.avatar_url,
-        (SELECT CAST(COALESCE(SUM(v.value), 0) AS SIGNED) FROM votes v WHERE v.comment_id = cm.id) AS vote_count
+        (SELECT CAST(COALESCE(SUM(v.value), 0) AS SIGNED) FROM votes v WHERE v.comment_id = cm.id) AS vote_count,
+        COALESCE((SELECT mv.value FROM votes mv WHERE mv.comment_id = cm.id AND mv.user_id = ?), 0) AS my_vote
       FROM comments cm
       JOIN users u ON cm.user_id = u.id
       WHERE cm.post_id = ?
-      ORDER BY cm.created_at ASC
-      LIMIT ? OFFSET ?`,
-      [req.params.postId, limitNum, offset]
+      ORDER BY cm.created_at ASC, cm.id ASC`,
+      [req.user ? req.user.id : 0, req.params.postId]
     );
 
-    const [countResult] = await pool.query(
-      'SELECT COUNT(*) AS total FROM comments WHERE post_id = ?',
-      [req.params.postId]
-    );
-    const total = countResult[0].total;
+    const threads = buildTree(rows, null);
+    const offset = (pageNum - 1) * limitNum;
 
-    const nested = buildTree(rows, null);
     res.json({
-      data: nested,
-      total,
+      data: threads.slice(offset, offset + limitNum),
+      total: threads.length,
+      total_comments: rows.length,
       page: pageNum,
       limit: limitNum,
-      pages: Math.ceil(total / limitNum)
+      pages: Math.ceil(threads.length / limitNum)
     });
   } catch (err) {
     sendError(res, err, 'Error al obtener comentarios');
@@ -44,13 +43,16 @@ const create = async (req, res) => {
     const { content, parent_id } = req.body;
     const { postId } = req.params;
 
-    if (!content) {
-      return res.status(400).json({ error: 'El contenido es obligatorio' });
-    }
-
     const [post] = await pool.query('SELECT id FROM posts WHERE id = ?', [postId]);
     if (post.length === 0) {
       return res.status(404).json({ error: 'Post no encontrado' });
+    }
+
+    if (parent_id) {
+      const [parent] = await pool.query('SELECT post_id FROM comments WHERE id = ?', [parent_id]);
+      if (parent.length === 0 || parent[0].post_id !== postId) {
+        return res.status(400).json({ error: 'El comentario al que respondés no existe en este post' });
+      }
     }
 
     const [result] = await pool.query(
@@ -58,7 +60,7 @@ const create = async (req, res) => {
       [postId, req.user.id, content, parent_id || null]
     );
 
-    res.status(201).json({ id: result.insertId, post_id: Number(postId), content, parent_id });
+    res.status(201).json({ id: result.insertId, post_id: postId, content, parent_id: parent_id || null });
   } catch (err) {
     sendError(res, err, 'Error al crear comentario');
   }
@@ -66,7 +68,7 @@ const create = async (req, res) => {
 
 const update = async (req, res) => {
   try {
-    const [existing] = await pool.query('SELECT user_id FROM comments WHERE id = ?', [req.params.id]);
+    const [existing] = await pool.query('SELECT user_id FROM comments WHERE id = ? AND post_id = ?', [req.params.id, req.params.postId]);
 
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Comentario no encontrado' });
@@ -77,10 +79,6 @@ const update = async (req, res) => {
     }
 
     const { content } = req.body;
-    if (!content) {
-      return res.status(400).json({ error: 'El contenido es obligatorio' });
-    }
-
     await pool.query('UPDATE comments SET content = ? WHERE id = ?', [content, req.params.id]);
     res.json({ message: 'Comentario actualizado' });
   } catch (err) {
@@ -90,7 +88,7 @@ const update = async (req, res) => {
 
 const remove = async (req, res) => {
   try {
-    const [existing] = await pool.query('SELECT user_id FROM comments WHERE id = ?', [req.params.id]);
+    const [existing] = await pool.query('SELECT user_id FROM comments WHERE id = ? AND post_id = ?', [req.params.id, req.params.postId]);
 
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Comentario no encontrado' });

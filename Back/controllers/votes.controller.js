@@ -1,96 +1,66 @@
 const pool = require('../db/connection');
 const { sendError } = require('../utils/response.utils');
 
-async function getPostVoteCount(postId) {
+// column y table vienen de este archivo, nunca del request
+const TARGETS = {
+  post: { table: 'posts', column: 'post_id', notFound: 'Post no encontrado' },
+  comment: { table: 'comments', column: 'comment_id', notFound: 'Comentario no encontrado' }
+};
+
+async function getVoteCount(column, targetId) {
   const [rows] = await pool.query(
-    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE post_id = ?',
-    [postId]
+    `SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE ${column} = ?`,
+    [targetId]
   );
   return Number(rows[0].total);
 }
 
-async function getCommentVoteCount(commentId) {
-  const [rows] = await pool.query(
-    'SELECT COALESCE(SUM(value), 0) AS total FROM votes WHERE comment_id = ?',
-    [commentId]
-  );
-  return Number(rows[0].total);
-}
+/**
+ * Votar funciona como toggle: el mismo voto otra vez lo quita, el voto contrario lo da vuelta.
+ * Devuelve también my_vote (1, -1 o 0) para que el front marque el botón.
+ */
+const vote = (type) => async (req, res) => {
+  const { table, column, notFound } = TARGETS[type];
 
-const votePost = async (req, res) => {
   try {
     const { id } = req.params;
     const { value } = req.body;
 
-    if (!value || ![1, -1].includes(value)) {
-      return res.status(400).json({ error: 'El valor debe ser 1 o -1' });
-    }
-
-    const [post] = await pool.query('SELECT id FROM posts WHERE id = ?', [id]);
-    if (post.length === 0) {
-      return res.status(404).json({ error: 'Post no encontrado' });
+    const [target] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [id]);
+    if (target.length === 0) {
+      return res.status(404).json({ error: notFound });
     }
 
     const [existing] = await pool.query(
-      'SELECT id, value FROM votes WHERE post_id = ? AND user_id = ?',
+      `SELECT id, value FROM votes WHERE ${column} = ? AND user_id = ?`,
       [id, req.user.id]
     );
 
+    let myVote = value;
     if (existing.length > 0) {
       if (existing[0].value === value) {
         await pool.query('DELETE FROM votes WHERE id = ?', [existing[0].id]);
-        return res.json({ message: 'Voto eliminado', vote_count: await getPostVoteCount(id) });
+        myVote = 0;
+      } else {
+        await pool.query('UPDATE votes SET value = ? WHERE id = ?', [value, existing[0].id]);
       }
-      await pool.query('UPDATE votes SET value = ? WHERE id = ?', [value, existing[0].id]);
     } else {
+      // ON DUPLICATE KEY cubre el doble click (dos requests simultáneos del mismo usuario)
       await pool.query(
-        'INSERT INTO votes (user_id, post_id, value) VALUES (?, ?, ?)',
+        `INSERT INTO votes (user_id, ${column}, value) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE value = VALUES(value)`,
         [req.user.id, id, value]
       );
     }
 
-    res.json({ message: 'Voto registrado', vote_count: await getPostVoteCount(id) });
+    res.json({
+      message: myVote === 0 ? 'Voto eliminado' : 'Voto registrado',
+      vote_count: await getVoteCount(column, id),
+      my_vote: myVote
+    });
   } catch (err) {
     sendError(res, err, 'Error al votar');
   }
 };
 
-const voteComment = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { value } = req.body;
-
-    if (!value || ![1, -1].includes(value)) {
-      return res.status(400).json({ error: 'El valor debe ser 1 o -1' });
-    }
-
-    const [comment] = await pool.query('SELECT id FROM comments WHERE id = ?', [id]);
-    if (comment.length === 0) {
-      return res.status(404).json({ error: 'Comentario no encontrado' });
-    }
-
-    const [existing] = await pool.query(
-      'SELECT id, value FROM votes WHERE comment_id = ? AND user_id = ?',
-      [id, req.user.id]
-    );
-
-    if (existing.length > 0) {
-      if (existing[0].value === value) {
-        await pool.query('DELETE FROM votes WHERE id = ?', [existing[0].id]);
-        return res.json({ message: 'Voto eliminado', vote_count: await getCommentVoteCount(id) });
-      }
-      await pool.query('UPDATE votes SET value = ? WHERE id = ?', [value, existing[0].id]);
-    } else {
-      await pool.query(
-        'INSERT INTO votes (user_id, comment_id, value) VALUES (?, ?, ?)',
-        [req.user.id, id, value]
-      );
-    }
-
-    res.json({ message: 'Voto registrado', vote_count: await getCommentVoteCount(id) });
-  } catch (err) {
-    sendError(res, err, 'Error al votar');
-  }
-};
-
-module.exports = { votePost, voteComment };
+module.exports = { votePost: vote('post'), voteComment: vote('comment') };

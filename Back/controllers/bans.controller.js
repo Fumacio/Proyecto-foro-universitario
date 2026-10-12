@@ -37,6 +37,10 @@ const banUser = async (req, res) => {
       return res.status(409).json({ error: 'El usuario ya está baneado' });
     }
 
+    if (user_id === req.user.id) {
+      return res.status(400).json({ error: 'No podés banearte a vos mismo' });
+    }
+
     const expiresAt = type === 'temporary'
       ? new Date(Date.now() + duration_hours * 60 * 60 * 1000)
       : null;
@@ -88,7 +92,7 @@ const getBans = async (req, res) => {
       `SELECT b.*, u.username, bu.username AS banned_by_username
       FROM bans b
       JOIN users u ON b.user_id = u.id
-      JOIN users bu ON b.banned_by = bu.id
+      LEFT JOIN users bu ON b.banned_by = bu.id
       ORDER BY b.created_at DESC`
     );
 
@@ -108,6 +112,11 @@ const getBans = async (req, res) => {
 const getBanStatus = async (req, res) => {
   try {
     const { user_id } = req.params;
+
+    // El motivo de un ban solo lo ve el propio usuario o un admin
+    if (user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'No tenés permiso para ver esta información' });
+    }
 
     const [bans] = await pool.query(
       `SELECT id, reason, type, expires_at, created_at FROM bans

@@ -40,6 +40,12 @@ const getById = async (req, res) => {
 const update = async (req, res) => {
   try {
     const { username, email, role_id } = req.body;
+
+    // Evita que un admin se saque su propio rol por error y se quede sin acceso al panel
+    if (role_id && req.params.id === req.user.id && role_id !== 1) {
+      return res.status(400).json({ error: 'No podés quitarte tu propio rol de admin' });
+    }
+
     const fields = [];
     const values = [];
 
@@ -52,7 +58,11 @@ const update = async (req, res) => {
     }
 
     values.push(req.params.id);
-    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    const [result] = await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
 
     res.json({ message: 'Usuario actualizado' });
   } catch (err) {
@@ -62,6 +72,10 @@ const update = async (req, res) => {
 
 const remove = async (req, res) => {
   try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'No podés eliminar tu propia cuenta desde el panel' });
+    }
+
     const [result] = await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
 
     if (result.affectedRows === 0) {

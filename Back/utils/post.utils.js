@@ -6,6 +6,13 @@ async function saveTags(postId, tagIds) {
   await pool.query('INSERT INTO post_tags (post_id, tag_id) VALUES ?', [values]);
 }
 
+/** Devuelve true si todos los IDs de tags existen */
+async function tagsExist(tagIds) {
+  if (!tagIds || tagIds.length === 0) return true;
+  const [rows] = await pool.query('SELECT COUNT(*) AS total FROM tags WHERE id IN (?)', [tagIds]);
+  return rows[0].total === tagIds.length;
+}
+
 async function getTagsByPostIds(postIds) {
   if (postIds.length === 0) return {};
   const [rows] = await pool.query(
@@ -23,4 +30,9 @@ async function getTagsByPostIds(postIds) {
   return map;
 }
 
-module.exports = { saveTags, getTagsByPostIds };
+/** Escapa los comodines de LIKE para que "%" o "_" en una búsqueda se tomen literales */
+function escapeLike(text) {
+  return text.replace(/[\\%_]/g, (c) => '\\' + c);
+}
+
+module.exports = { saveTags, tagsExist, getTagsByPostIds, escapeLike };

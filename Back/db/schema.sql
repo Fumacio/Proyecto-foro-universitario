@@ -122,9 +122,10 @@ CREATE TABLE IF NOT EXISTS bans (
   type ENUM('temporary', 'permanent') NOT NULL DEFAULT 'temporary',
   expires_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  banned_by INT NOT NULL,
+  banned_by INT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE CASCADE,
+  -- SET NULL: si se borra al admin que baneó, el ban sigue vigente
+  CONSTRAINT fk_bans_banned_by FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_user_bans (user_id),
   INDEX idx_expires (expires_at)
 ) ENGINE=InnoDB;
