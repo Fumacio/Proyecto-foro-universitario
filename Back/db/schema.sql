@@ -1,11 +1,13 @@
-CREATE DATABASE IF NOT EXISTS foro_universitario;
+-- utf8mb4: acentos, ñ y emojis se guardan bien sin importar la configuración del servidor
+SET NAMES utf8mb4;
+CREATE DATABASE IF NOT EXISTS foro_universitario CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE foro_universitario;
 
 -- Roles
 CREATE TABLE IF NOT EXISTS roles (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Usuarios
 CREATE TABLE IF NOT EXISTS users (
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (role_id) REFERENCES roles(id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Categorías (jerárquicas)
 CREATE TABLE IF NOT EXISTS categories (
@@ -36,7 +38,7 @@ CREATE TABLE IF NOT EXISTS categories (
   parent_id INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Posts
 CREATE TABLE IF NOT EXISTS posts (
@@ -52,7 +54,7 @@ CREATE TABLE IF NOT EXISTS posts (
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
   INDEX idx_posts_category (category_id, created_at),
   INDEX idx_posts_user (user_id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Comentarios (con replies anidadas)
 CREATE TABLE IF NOT EXISTS comments (
@@ -67,7 +69,7 @@ CREATE TABLE IF NOT EXISTS comments (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE,
   INDEX idx_comments_post (post_id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Votos (posts y comentarios)
 CREATE TABLE IF NOT EXISTS votes (
@@ -83,14 +85,14 @@ CREATE TABLE IF NOT EXISTS votes (
   UNIQUE KEY uk_vote_post (post_id, user_id),
   UNIQUE KEY uk_vote_comment (comment_id, user_id),
   CHECK ((post_id IS NOT NULL AND comment_id IS NULL) OR (post_id IS NULL AND comment_id IS NOT NULL))
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tags
 CREATE TABLE IF NOT EXISTS tags (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE,
   color VARCHAR(7) DEFAULT '#F99B4A'
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Relación posts-tags
 CREATE TABLE IF NOT EXISTS post_tags (
@@ -99,7 +101,7 @@ CREATE TABLE IF NOT EXISTS post_tags (
   PRIMARY KEY (post_id, tag_id),
   FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
   FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tokens de recuperación de contraseña
 CREATE TABLE IF NOT EXISTS password_resets (
@@ -112,7 +114,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   INDEX idx_token (token),
   INDEX idx_user (user_id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Bans de usuarios
 CREATE TABLE IF NOT EXISTS bans (
@@ -128,7 +130,7 @@ CREATE TABLE IF NOT EXISTS bans (
   CONSTRAINT fk_bans_banned_by FOREIGN KEY (banned_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_user_bans (user_id),
   INDEX idx_expires (expires_at)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Reportes de contenido
 CREATE TABLE IF NOT EXISTS reports (
@@ -147,4 +149,4 @@ CREATE TABLE IF NOT EXISTS reports (
   FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE SET NULL,
   FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_status (status)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

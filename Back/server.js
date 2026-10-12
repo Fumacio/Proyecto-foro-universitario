@@ -59,10 +59,13 @@ const generalLimiter = rateLimit({
   message: { error: 'Demasiadas peticiones, intentá más tarde' }
 });
 
-// Rate limiting para rutas de autenticación (más estricto)
+// Rate limiting para rutas de autenticación (más estricto).
+// Solo cuentan los intentos fallidos: frena la fuerza bruta sin bloquear a toda una facultad
+// que sale a internet con la misma IP.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 10, // 10 intentos por IP cada 15 min
+  max: 10, // 10 intentos fallidos por IP cada 15 min
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de autenticación, esperá 15 minutos' }
