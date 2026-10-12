@@ -1,18 +1,22 @@
 function getReturnUrl() {
   const url = localStorage.getItem('returnUrl');
   localStorage.removeItem('returnUrl');
-  return url || '/';
+  // Solo rutas internas (evita redirigir a otro sitio)
+  return url && url.startsWith('/') && !url.startsWith('//') && !/\/(login|register)\.html/.test(url) ? url : '/';
+}
+
+function showMsg(text, type = 'error') {
+  const el = document.getElementById('msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `form-msg form-msg-${type}`;
 }
 
 function showAuthMsgIfAny() {
   const msg = sessionStorage.getItem('authMsg');
   if (!msg) return;
   sessionStorage.removeItem('authMsg');
-  const el = document.getElementById('msg');
-  if (el) {
-    el.textContent = msg;
-    el.style.color = 'var(--red)';
-  }
+  showMsg(msg);
 }
 
 function handleAuthSuccess(data) {
@@ -29,8 +33,9 @@ function initLoginForm() {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const msg = document.getElementById('msg');
-    msg.textContent = '';
+    const button = form.querySelector('button[type="submit"]');
+    showMsg('');
+    button.disabled = true;
 
     try {
       const data = await api.post('/auth/login', {
@@ -39,9 +44,8 @@ function initLoginForm() {
       });
       handleAuthSuccess(data);
     } catch (err) {
-      msg.textContent = err.error || 'Error al iniciar sesión';
-      msg.className = 'text-sm mt-2';
-      msg.style.color = 'var(--red)';
+      showMsg(errorMessage(err, 'Error al iniciar sesión'));
+      button.disabled = false;
     }
   });
 }
@@ -54,8 +58,9 @@ function initRegisterForm() {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const msg = document.getElementById('msg');
-    msg.textContent = '';
+    const button = form.querySelector('button[type="submit"]');
+    showMsg('');
+    button.disabled = true;
 
     try {
       const data = await api.post('/auth/register', {
@@ -71,9 +76,8 @@ function initRegisterForm() {
       });
       handleAuthSuccess(data);
     } catch (err) {
-      msg.textContent = err.error || 'Error al registrarse';
-      msg.className = 'text-sm mt-2';
-      msg.style.color = 'var(--red)';
+      showMsg(errorMessage(err, 'Error al registrarse'));
+      button.disabled = false;
     }
   });
 }

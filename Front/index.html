@@ -3,24 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ForoU - Inicio</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Foro UTN FRT</title>
+  <meta name="description" content="Foro académico de la UTN Facultad Regional Tucumán: apuntes, consultas de parcial y material de clase.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tailwind.css">
   <link rel="stylesheet" href="/css/theme.css">
 </head>
 <body class="min-h-screen">
   <div id="navbar"></div>
 
-  <div class="max-w-6xl mx-auto px-4 py-8">
-    <h1 id="browse-title" class="text-3xl font-bold text-primary mb-2">Foro Universitario</h1>
-    <h1 id="search-title" class="text-2xl font-bold text-primary mb-2 hidden"></h1>
-    <p id="browse-subtitle" class="text-secondary mb-8">Elegí una categoría para ver los posts</p>
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <section id="hero" class="hero card mb-6">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold text-primary">Foro Universitario UTN FRT</h1>
+        <p class="text-secondary mt-1">Apuntes, consultas de parcial, ideas y material de clase de la comunidad de la Facultad Regional Tucumán.</p>
+      </div>
+    </section>
 
-    <div id="categories" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <p class="text-muted">Cargando categorías...</p>
+    <div class="layout">
+      <div class="layout-main">
+        <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <h2 id="feed-title" class="text-lg font-semibold text-primary">Últimos posts</h2>
+          <div class="sort-tabs" role="tablist" aria-label="Ordenar posts">
+            <button type="button" class="sort-tab" data-sort="recent" role="tab">Recientes</button>
+            <button type="button" class="sort-tab" data-sort="votes" role="tab">Más votados</button>
+          </div>
+        </div>
+        <div id="feed" class="space-y-3"></div>
+        <div id="pagination"></div>
+      </div>
+
+      <aside class="layout-side">
+        <div class="card p-4">
+          <h2 class="side-title">Categorías</h2>
+          <div id="categories" class="space-y-4">
+            <div class="skeleton" style="height: 14px; width: 70%"></div>
+            <div class="skeleton" style="height: 14px; width: 50%"></div>
+          </div>
+        </div>
+        <div id="side-cta" class="card p-4 mt-4"></div>
+      </aside>
     </div>
-
-    <div id="pagination"></div>
-  </div>
+  </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>
