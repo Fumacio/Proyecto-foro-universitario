@@ -1,5 +1,5 @@
 const { z } = require('zod');
-const { id } = require('./common');
+const { id, optionalText } = require('./common');
 
 const createReportSchema = z
   .object({
@@ -8,7 +8,7 @@ const createReportSchema = z
     reason: z.enum(['spam', 'abuso', 'contenido_inapropiado', 'off_topic', 'otro'], {
       error: 'Razón inválida (spam | abuso | contenido_inapropiado | off_topic | otro)'
     }),
-    description: z.string().trim().max(1000, 'La descripción no puede superar 1000 caracteres').optional()
+    description: optionalText(1000, 'La descripción')
   })
   .superRefine((data, ctx) => {
     const hasPost = data.post_id != null;

@@ -66,7 +66,7 @@ const getReports = async (req, res) => {
       `SELECT r.*,
         u.username AS reporter_username,
         p.title AS post_title, p.user_id AS post_user_id,
-        c.content AS comment_content, c.user_id AS comment_user_id,
+        c.content AS comment_content, c.user_id AS comment_user_id, c.post_id AS comment_post_id,
         ru.username AS resolved_by_username
       FROM reports r
       JOIN users u ON r.reporter_id = u.id

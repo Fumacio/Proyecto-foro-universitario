@@ -19,8 +19,22 @@ const adminRoutes = require('./routes/admin.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const bansRoutes = require('./routes/bans.routes');
 const errorHandler = require('./middleware/errorHandler');
+const pool = require('./db/connection');
+
+if (!process.env.JWT_SECRET) {
+  throw new Error('Falta JWT_SECRET en el .env (copiá .env.example y generá un secreto largo y aleatorio).');
+}
+if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.startsWith('changeme'))) {
+  throw new Error('JWT_SECRET es demasiado débil para producción. Generá uno con: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"');
+}
 
 const app = express();
+
+// Detrás de un proxy (Nginx, Render, Railway...) el rate limit tiene que ver la IP real del cliente.
+// TRUST_PROXY=1 significa "confiar en un proxy delante".
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+}
 
 // Seguridad: headers HTTP (helmet) y compresión de respuestas
 app.use(helmet({
@@ -35,19 +49,23 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting general
+// Rate limiting general. Cada página del front hace 3-5 llamadas a la API y en la facultad
+// muchos alumnos salen a internet con la misma IP, así que 100 era muy poco.
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100,
+  max: Number(process.env.RATE_LIMIT_MAX) || 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones, intentá más tarde' }
 });
 
-// Rate limiting para rutas de autenticación (más estricto)
+// Rate limiting para rutas de autenticación (más estricto).
+// Solo cuentan los intentos fallidos: frena la fuerza bruta sin bloquear a toda una facultad
+// que sale a internet con la misma IP.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 10, // 10 intentos por IP cada 15 min
+  max: 10, // 10 intentos fallidos por IP cada 15 min
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de autenticación, esperá 15 minutos' }
@@ -62,7 +80,7 @@ const forgotPasswordLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes de recuperación, esperá 1 hora' }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '..', 'Front')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -85,11 +103,30 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Ruta de API inexistente → JSON (antes devolvía la página HTML de error de Express)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Ruta no encontrada' });
+});
+
 // Middleware de error global (debe ser el último)
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  const server = app.listen(PORT, () => {
+    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  });
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+  // Apagado prolijo: termina los requests en curso y cierra las conexiones a la DB
+  const shutdown = (signal) => {
+    console.log(`${signal} recibido, cerrando servidor...`);
+    server.close(() => {
+      pool.end().finally(() => process.exit(0));
+    });
+    setTimeout(() => process.exit(1), 10000).unref();
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+module.exports = app;

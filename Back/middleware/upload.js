@@ -2,6 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
+const { ValidationError } = require('../utils/errors');
 
 const MIME_EXTENSION_MAP = {
   'image/jpeg': '.jpg',
@@ -35,7 +36,7 @@ const fileFilter = (req, file, cb) => {
   if (isMimeAllowed && isExtAllowed) {
     cb(null, true);
   } else {
-    cb(new Error('Formato de archivo no permitido. Solo se admiten JPG, PNG, GIF y WEBP'), false);
+    cb(new ValidationError('Formato de archivo no permitido. Solo se admiten JPG, PNG, GIF y WEBP'), false);
   }
 };
 

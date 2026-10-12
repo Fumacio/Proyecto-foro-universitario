@@ -1,39 +1,67 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../db/connection');
 
-const auth = async (req, res, next) => {
-  const header = req.headers.authorization;
-
+/**
+ * Valida el token y trae al usuario de la DB.
+ * Devuelve { user } si la sesión es válida o { error } con el mensaje para el 401.
+ * Los errores de DB se propagan (no son culpa del token: no hay que desloguear a nadie).
+ */
+async function resolveUser(header) {
   if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
+    return { error: 'Token no proporcionado' };
   }
 
-  const token = header.split(' ')[1];
-
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = jwt.verify(header.split(' ')[1], process.env.JWT_SECRET);
+  } catch (err) {
+    return { error: err.name === 'TokenExpiredError' ? 'Token expirado' : 'Token inválido' };
+  }
 
-    // Verificar que el token_version del JWT coincida con el de la DB
-    const [rows] = await pool.query(
-      'SELECT token_version FROM users WHERE id = ?',
-      [decoded.id]
-    );
+  // El rol y el username se leen de la DB (no del JWT): si un admin le cambia el rol
+  // a alguien, el cambio aplica en el próximo request y no recién cuando vuelva a loguearse.
+  const [rows] = await pool.query(
+    `SELECT u.username, u.token_version, r.name AS role
+     FROM users u JOIN roles r ON u.role_id = r.id
+     WHERE u.id = ?`,
+    [decoded.id]
+  );
 
-    if (rows.length === 0) {
-      return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (rows.length === 0) {
+    return { error: 'Usuario no encontrado' };
+  }
+
+  if (rows[0].token_version !== decoded.token_version) {
+    return { error: 'Sesión expirada, iniciá sesión nuevamente' };
+  }
+
+  return { user: { id: decoded.id, username: rows[0].username, role: rows[0].role, token_version: rows[0].token_version } };
+}
+
+const auth = async (req, res, next) => {
+  try {
+    const { user, error } = await resolveUser(req.headers.authorization);
+    if (error) {
+      return res.status(401).json({ error });
     }
-
-    if (rows[0].token_version !== decoded.token_version) {
-      return res.status(401).json({ error: 'Sesión expirada, iniciá sesión nuevamente' });
-    }
-
-    req.user = decoded;
+    req.user = user;
     next();
   } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expirado' });
-    }
-    return res.status(401).json({ error: 'Token inválido' });
+    next(err);
+  }
+};
+
+/**
+ * Para rutas públicas que muestran algo extra si hay sesión (ej. qué votó el usuario).
+ * Nunca corta el request: sin token o con token inválido sigue como anónimo.
+ */
+auth.optional = async (req, res, next) => {
+  try {
+    const { user } = await resolveUser(req.headers.authorization);
+    if (user) req.user = user;
+    next();
+  } catch (err) {
+    next(err);
   }
 };
 

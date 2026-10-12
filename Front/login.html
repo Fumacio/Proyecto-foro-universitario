@@ -3,44 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ForoU - Iniciar Sesión</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Iniciar sesión · Foro UTN FRT</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tailwind.css">
   <link rel="stylesheet" href="/css/theme.css">
 </head>
 <body class="min-h-screen">
   <div id="navbar"></div>
 
-  <div class="max-w-md mx-auto px-4 py-16">
-    <div class="card rounded-lg p-8">
-      <h1 class="text-2xl font-bold text-primary mb-6 text-center">Iniciar Sesión</h1>
+  <main class="max-w-md mx-auto px-4 py-12">
+    <div class="card auth-card">
+      <div class="brand-logo auth-logo" aria-hidden="true">U</div>
+      <h1 class="text-2xl font-bold text-primary text-center">Bienvenido de nuevo</h1>
+      <p class="text-secondary text-sm text-center mt-1 mb-6">Iniciá sesión para publicar, comentar y votar.</p>
 
       <form id="login-form" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-secondary mb-1">Email</label>
-          <input type="email" name="email" required
-                 class="w-full input-field rounded px-3 py-2">
+          <label for="email" class="field-label">Email</label>
+          <input id="email" type="email" name="email" required autocomplete="email" class="w-full input-field rounded-lg px-3 py-2">
         </div>
         <div>
-          <label class="block text-sm font-medium text-secondary mb-1">Contraseña</label>
-          <input type="password" name="password" required
-                 class="w-full input-field rounded px-3 py-2">
+          <div class="flex items-center justify-between">
+            <label for="password" class="field-label">Contraseña</label>
+            <a href="/forgot-password.html" class="link-theme text-xs mb-1.5">¿La olvidaste?</a>
+          </div>
+          <input id="password" type="password" name="password" required autocomplete="current-password" class="w-full input-field rounded-lg px-3 py-2">
         </div>
-        <button type="submit" class="w-full btn-primary py-2 rounded font-medium">
-          Entrar
-        </button>
+        <button type="submit" class="w-full btn-primary py-2.5 rounded-full font-semibold">Entrar</button>
       </form>
 
-      <div id="msg" class="text-center mt-4"></div>
-
-      <p class="text-center text-sm mt-4">
-        <a href="/forgot-password.html" class="link-theme hover:underline">¿Olvidaste tu contraseña?</a>
-      </p>
+      <div id="msg" class="form-msg" role="alert"></div>
 
       <p class="text-center text-sm text-muted mt-4">
-        ¿No tenés cuenta? <a href="/register.html" class="link-theme hover:underline">Registrate</a>
+        ¿No tenés cuenta? <a href="/register.html" class="link-theme font-medium">Registrate</a>
       </p>
     </div>
-  </div>
+  </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>

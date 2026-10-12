@@ -13,4 +13,23 @@ const userIdParam = z.object({
 /** ID numérico positivo en body */
 const id = z.coerce.number({ error: 'ID inválido' }).int('ID inválido').positive('ID inválido');
 
-module.exports = { idParam, userIdParam, id };
+/** Rutas anidadas /posts/:postId/comments y /posts/:postId/comments/:id */
+const postIdParam = z.object({ postId: id });
+const postCommentParams = z.object({ postId: id, id });
+
+/**
+ * Texto opcional: acepta que falte, null o string vacío (los dos últimos se guardan como null).
+ * El front manda `null` en los campos que el usuario deja vacíos.
+ */
+const optionalText = (max, label) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    z
+      .string({ error: `${label} debe ser texto` })
+      .trim()
+      .max(max, `${label} no puede superar ${max} caracteres`)
+      .nullable()
+      .optional()
+  );
+
+module.exports = { idParam, userIdParam, id, postIdParam, postCommentParams, optionalText };

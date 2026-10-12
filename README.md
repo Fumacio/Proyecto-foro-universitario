@@ -10,10 +10,10 @@ Ideas · apuntes · consultas de parcial · material de clase
 [![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Zod](https://img.shields.io/badge/validation-Zod-3068B7?logo=zod&logoColor=white)](https://zod.dev/)
 [![JWT](https://img.shields.io/badge/auth-JWT-black?logo=json-web-tokens)](https://jwt.io/)
-[![Tests](https://img.shields.io/badge/tests-22%20passed-brightgreen)](#-cómo-probarlo)
+[![Tests](https://img.shields.io/badge/tests-35%20passed-brightgreen)](#-cómo-probarlo)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
-**Status:** FASE 1 (seguridad) ✅ · FASE 2 (vista Reddit) ⏳
+**Status:** FASE 1 (seguridad) ✅ · Auditoría + FASE 2 (vista Reddit) ✅
 
 </div>
 
@@ -37,7 +37,10 @@ Ideas · apuntes · consultas de parcial · material de clase
 ## 📸 Capturas
 
 <div align="center">
-  <p><em>Próximamente — Fase 2 (rediseño estilo Reddit).</em></p>
+  <img src="docs/screenshots/inicio.png" alt="Inicio con el feed de posts y las categorías" width="900">
+  <br><br>
+  <img src="docs/screenshots/post.png" alt="Un post con comentarios en hilos" width="440">
+  <img src="docs/screenshots/admin.png" alt="Panel de admin, pestaña de reportes" width="440">
 </div>
 
 ---
@@ -48,10 +51,10 @@ Ideas · apuntes · consultas de parcial · material de clase
 |------|-------------|
 | **Cuenta** | Registro, login (JWT), recuperación de contraseña por email, perfil con bio/avatar, baja de cuenta |
 | **Contenido** | Posts con categoría (jerárquica) e imagen, comentarios anidados, tags |
-| **Votos** | Upvote / downvote en posts y comentarios (karma) |
+| **Votos** | Upvote / downvote en posts y comentarios (karma), también desde el listado |
 | **Búsqueda** | Filtros por categoría y tag, búsqueda por texto, orden (recientes / votos), paginación |
 | **Moderación** | Reportes (spam, abuso, off-topic…), bans, panel de admin |
-| **Roles** | `admin` · `moderador` · `alumno` con middleware de permisos |
+| **Roles** | `admin` · `profesor` · `alumno` con middleware de permisos |
 | **Admin** | Dashboard, usuarios, categorías, tags, reportes y bans |
 
 ---
@@ -64,7 +67,7 @@ Ideas · apuntes · consultas de parcial · material de clase
 | DB | **MySQL** (`mysql2`) |
 | Validación | **Zod** (body, query y params) |
 | Auth | **JWT** + `token_version` (invalida sesiones al cambiar contraseña) |
-| Front | HTML / CSS / JS **vanilla** |
+| Front | HTML / CSS / JS **vanilla** + Tailwind compilado |
 | Seguridad | `helmet` · `compression` · `cors` · `express-rate-limit` · `bcrypt` |
 | Tests | **Jest** |
 | Email | `nodemailer` (SMTP) |
@@ -86,13 +89,30 @@ mysql -u root -p < Back/db/seed.sql
 # 3. Entorno
 cp .env.example .env
 # → editá .env (DB_*, JWT_SECRET, SMTP_*)
+# JWT_SECRET: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 # 4. Arrancar
 npm run dev
 # → http://localhost:3000
 
-# 5. Tests
+# 5. Primer admin: registrate desde la web y después
+npm run make-admin -- tu@email.com
+
+# 6. Tests
 npm test
+```
+
+**¿Ya tenías la base creada con una versión anterior?** Corré la migración una vez:
+
+```bash
+mysql -u root -p < Back/db/migrations/001_bans_banned_by_set_null.sql
+```
+
+**Estilos:** el front usa Tailwind compilado en `Front/css/tailwind.css` (ya viene generado).
+Si agregás clases nuevas de Tailwind en el HTML/JS, regeneralo con:
+
+```bash
+npm run build:css   # o npm run watch:css mientras desarrollás
 ```
 
 ### Variables de entorno
@@ -105,6 +125,8 @@ npm test
 | `DB_HOST` / `DB_USER` / `DB_PASS` / `DB_NAME` | MySQL |
 | `JWT_SECRET` | Firme de tokens — **fuerte y nunca a Git** |
 | `SMTP_*` | Recuperación de contraseñas |
+| `TRUST_PROXY` | Opcional. `1` si corre detrás de un proxy/hosting (para que el rate limit vea la IP real) |
+| `RATE_LIMIT_MAX` | Opcional. Requests por IP cada 15 min en `/api` (default `1000`) |
 
 > `.env` está en `.gitignore`; solo se versiona `.env.example`.  
 > El server carga el `.env` con path absoluto: funciona aunque lo lances desde otra carpeta.
@@ -121,12 +143,13 @@ npm test
 │   ├── middleware/         # auth · ban · role · validate · upload · errorHandler
 │   ├── schemas/            # Schemas Zod (auth, posts, comments, …)
 │   ├── utils/              # errores tipados · mailer · helpers
-│   ├── db/                 # connection · schema.sql · seed.sql
+│   ├── db/                 # connection · schema.sql · seed.sql · migrations/
+│   ├── scripts/            # make-admin
 │   └── tests/              # Jest
 ├── Front/
 │   ├── *.html              # index · posts · login · admin · profile…
-│   ├── js/                 # api · auth · nav · post(s) · admin
-│   └── css/theme.css
+│   ├── js/                 # api (helpers + UI compartida) · auth · nav · index · post(s) · profile · admin
+│   └── css/                # theme.css (tema propio) · tailwind.css (generado)
 ├── .env.example
 └── package.json
 ```
@@ -163,9 +186,11 @@ En dev, los `AppError` pueden traer `details` (campo → mensaje Zod).
 - **AppError** / `errorHandler` global
 - **JWT_SECRET** rotado · `.env` fuera de Git · `.env.example` plantilla
 - **Logs seguros** en producción (sin stack ni queries)
-- Rate limiting (general + estricto en auth)
+- Rate limiting (general + estricto en auth, solo cuenta intentos fallidos)
 - CORS → `FRONTEND_URL`
-- **`token_version`**: cambiar password cierra otras sesiones
+- **`token_version`**: cambiar o resetear la contraseña cierra las otras sesiones
+- El **rol se lee de la DB** en cada request (degradar a un admin aplica al instante)
+- Escapado de todo lo que se pinta en el front (incluye atributos); `image_url` solo acepta imágenes subidas al server
 - **bcrypt** (10 rounds) · uploads seguros · middleware de ban
 - Front: **auto-logout** ante 401 de token inválido
 
@@ -174,7 +199,7 @@ En dev, los `AppError` pueden traer `details` (campo → mensaje Zod).
 - JWT sin `expiresIn` (decisión actual; candidato a refresh tokens — FEAT-06)
 - Rate limiting en uploads y votos
 - Política de contraseñas más exigente
-- CSP estricta en producción
+- CSP estricta en producción (falta sacar los `onclick` inline que quedan)
 
 Plan completo: [`.opencode/PLAN.md`](.opencode/PLAN.md)
 
@@ -186,7 +211,8 @@ Plan completo: [`.opencode/PLAN.md`](.opencode/PLAN.md)
 |------|-----------|--------|
 | 0 | Descubrimiento | ✅ |
 | 1 | Seguridad base | ✅ |
-| 2 | Vista estilo Reddit | ⏳ **siguiente** |
+| — | Auditoría completa (bugs + seguridad) | ✅ |
+| 2 | Vista estilo Reddit | ✅ |
 | 3 | Arquitectura (services / repos) | pendiente |
 | 4 | Tests de integración | pendiente |
 | 5 | Producto (notifs, etc.) | pendiente |
@@ -196,10 +222,11 @@ Plan completo: [`.opencode/PLAN.md`](.opencode/PLAN.md)
 
 ## 🧪 Cómo probarlo
 
-1. Registro alumno → post → comentario → voto  
-2. Admin → Usuarios · Categorías · Tags · Reportes · Bans  
-3. Cambiá la contraseña → otras pestañas deben pedir login  
-4. Si rotás `JWT_SECRET`, volvé a iniciar sesión (el front te expulsa solo)
+1. Registro (dejando vacíos los datos opcionales) → post con imagen y etiquetas → comentario → respuesta → voto  
+2. `npm run make-admin -- tu@email.com` → Panel admin: Reportes (borrar contenido) · Usuarios · Bans · Categorías · Etiquetas  
+3. Cambiá la contraseña desde el perfil → otras pestañas deben pedir login  
+4. Baneá a un usuario → al entrar ve la pantalla de cuenta suspendida  
+5. Si rotás `JWT_SECRET`, volvé a iniciar sesión (el front te expulsa solo)
 
 ---
 

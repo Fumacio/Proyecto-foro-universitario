@@ -1,281 +1,210 @@
+const CAREERS = [
+  ['Ingenieria en Sistemas', 'Ingeniería en Sistemas'],
+  ['Ingenieria Civil', 'Ingeniería Civil'],
+  ['Ingenieria Electrica', 'Ingeniería Eléctrica'],
+  ['Ingenieria Mecanica', 'Ingeniería Mecánica'],
+  ['Ingenieria Quimica', 'Ingeniería Química'],
+  ['Licenciatura en Administracion', 'Licenciatura en Administración'],
+  ['Contador Publico', 'Contador Público'],
+  ['Otra', 'Otra']
+];
+const GENDERS = ['Masculino', 'Femenino', 'No binario', 'Otro'];
+
+function careerLabel(value) {
+  const found = CAREERS.find(([v]) => v === value);
+  return found ? found[1] : value;
+}
+
+function infoRow(label, value) {
+  if (!value) return '';
+  return `
+    <div class="flex justify-between gap-4 py-2 border-b border-theme last:border-0">
+      <span class="text-muted">${label}</span>
+      <span class="text-primary text-right">${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
+function options(list, selected) {
+  return list.map(([value, label]) =>
+    `<option value="${escapeHtml(value)}" ${selected === value ? 'selected' : ''}>${escapeHtml(label)}</option>`
+  ).join('');
+}
+
 async function loadProfile() {
   const container = document.getElementById('profile');
   const user = getUser();
 
   if (!user) {
+    localStorage.setItem('returnUrl', window.location.pathname + window.location.search);
     container.innerHTML = `
-      <div class="text-center py-8">
-        <p class="text-secondary mb-4">No estás logueado</p>
-        <a href="/login.html" class="link-theme hover:underline">Iniciar sesión</a>
+      <div class="card p-8 text-center">
+        <p class="text-secondary mb-4">Iniciá sesión para ver perfiles.</p>
+        <a href="/login.html" class="btn-primary px-5 py-2 rounded-full text-sm font-semibold">Iniciar sesión</a>
       </div>
     `;
     return;
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const userId = Number(params.get('user_id')) || user.id;
+  const isOwn = user.id === userId;
+
   try {
-    const params = new URLSearchParams(window.location.search);
-    const userId = params.get('user_id') || user.id;
-    const isOwn = user.id === Number(userId);
+    const [data, stats, activity] = await Promise.all([
+      api.get(`/users/${userId}`),
+      api.get(`/users/${userId}/stats`),
+      api.get(`/users/${userId}/activity`)
+    ]);
 
-    const data = await api.get(`/users/${userId}`);
-    const stats = await api.get(`/users/${userId}/stats`);
-
-    let activity = null;
-    if (isOwn) {
-      activity = await api.get(`/users/${userId}/activity`);
-    }
-
-    const avatarHtml = data.avatar_url
-      ? `<img src="${data.avatar_url}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`
-      : `<div class="w-16 h-16 rounded-full flex items-center justify-center" style="background-color: var(--orange-light)">
-           <span class="text-2xl font-bold" style="color: var(--orange)">${escapeHtml(data.username.charAt(0).toUpperCase())}</span>
-         </div>`;
-
+    document.title = `${data.username} · Foro UTN FRT`;
     const fullName = [data.first_name, data.last_name].filter(Boolean).join(' ');
 
     container.innerHTML = `
-      <div class="card rounded-lg p-6">
-        <div class="flex items-center gap-4 mb-6">
-          ${avatarHtml}
-          <div>
-            <h1 class="text-xl font-bold text-primary">${escapeHtml(data.username)}</h1>
-            <span class="text-xs badge-${data.role} px-2 py-0.5 rounded-full">${escapeHtml(data.role)}</span>
+      <section class="card overflow-hidden">
+        <div class="profile-banner"></div>
+        <div class="px-6 pb-6">
+          <div class="flex items-end justify-between gap-4 -mt-10 flex-wrap">
+            <div class="profile-avatar-wrap">${renderAvatar(data.avatar_url, data.username, 'lg')}</div>
+            ${isOwn ? `
+              <div class="flex gap-2 flex-wrap">
+                <label class="btn-secondary px-4 py-2 rounded-full text-sm font-medium cursor-pointer">
+                  Cambiar foto
+                  <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="sr-only" onchange="uploadAvatar(event)">
+                </label>
+                <button type="button" onclick="toggleSection('edit-profile-form')" class="btn-primary px-4 py-2 rounded-full text-sm font-semibold">Editar perfil</button>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="mt-3">
+            <h1 class="text-2xl font-bold text-primary">${escapeHtml(data.username)}</h1>
+            <div class="flex items-center gap-2 mt-1 text-sm text-muted flex-wrap">
+              <span class="badge badge-${escapeHtml(data.role)}">${escapeHtml(data.role)}</span>
+              ${fullName ? `<span>${escapeHtml(fullName)}</span><span aria-hidden="true">·</span>` : ''}
+              <span>Miembro desde ${formatDate(data.created_at)}</span>
+            </div>
+            ${data.bio ? `<p class="text-secondary text-sm mt-3 whitespace-pre-wrap">${escapeHtml(data.bio)}</p>` : ''}
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 mt-5">
+            <div class="stat-card rounded-xl" style="background: var(--bg-input)"><div class="stat-value">${stats.posts}</div><div class="stat-label">Posts</div></div>
+            <div class="stat-card rounded-xl" style="background: var(--bg-input)"><div class="stat-value">${stats.comments}</div><div class="stat-label">Comentarios</div></div>
+            <div class="stat-card rounded-xl" style="background: var(--bg-input)"><div class="stat-value ${voteClass(stats.karma)}">${stats.karma}</div><div class="stat-label">Karma</div></div>
+          </div>
+
+          <div class="text-sm mt-5">
+            ${isOwn || data.email ? infoRow('Email', data.email) : ''}
+            ${infoRow('Carrera', careerLabel(data.career))}
+            ${infoRow('Comisión', data.commission)}
+            ${infoRow('Edad', data.age ? `${data.age} años` : '')}
+            ${infoRow('Género', data.gender)}
           </div>
         </div>
+      </section>
 
-        <div class="grid grid-cols-3 gap-4 mb-6 p-3 rounded-lg" style="background-color: var(--bg-input)">
-          <div class="text-center">
-            <div class="text-lg font-bold text-primary">${stats.posts}</div>
-            <div class="text-xs text-secondary">Posts</div>
-          </div>
-          <div class="text-center">
-            <div class="text-lg font-bold text-primary">${stats.comments}</div>
-            <div class="text-xs text-secondary">Comentarios</div>
-          </div>
-          <div class="text-center">
-            <div class="text-lg font-bold ${stats.karma > 0 ? 'vote-positive' : stats.karma < 0 ? 'vote-negative' : 'text-muted'}">${stats.karma}</div>
-            <div class="text-xs text-secondary">Karma</div>
-          </div>
-        </div>
+      ${isOwn ? renderEditForms(data) : ''}
 
-        ${data.bio ? `<p class="text-secondary text-sm mb-6 whitespace-pre-wrap">${escapeHtml(data.bio)}</p>` : ''}
-
-        <div class="space-y-3 text-sm">
-          ${data.email ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Email</span>
-              <span class="text-primary">${escapeHtml(data.email)}</span>
-            </div>
-          ` : ''}
-          ${fullName ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Nombre</span>
-              <span class="text-primary">${escapeHtml(fullName)}</span>
-            </div>
-          ` : ''}
-          ${data.age ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Edad</span>
-              <span class="text-primary">${data.age} años</span>
-            </div>
-          ` : ''}
-          ${data.career ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Carrera</span>
-              <span class="text-primary">${escapeHtml(data.career)}</span>
-            </div>
-          ` : ''}
-          ${data.commission ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Comisión</span>
-              <span class="text-primary">${escapeHtml(data.commission)}</span>
-            </div>
-          ` : ''}
-          ${data.gender ? `
-            <div class="flex justify-between border-b border-theme pb-2">
-              <span class="text-secondary">Género</span>
-              <span class="text-primary">${escapeHtml(data.gender)}</span>
-            </div>
-          ` : ''}
-          <div class="flex justify-between border-b border-theme pb-2">
-            <span class="text-secondary">Miembro desde</span>
-            <span class="text-primary">${new Date(data.created_at).toLocaleDateString('es-AR')}</span>
-          </div>
-        </div>
-
-        ${isOwn ? `
-          <div class="mt-4 pt-4 border-t border-theme flex gap-3">
-            <button onclick="showEditProfile()" class="btn-secondary px-4 py-2 rounded text-sm">Editar perfil</button>
-            <label class="btn-secondary px-4 py-2 rounded text-sm cursor-pointer">
-              Cambiar avatar
-              <input type="file" accept="image/*" class="hidden" onchange="uploadAvatar(event)">
-            </label>
+      <section class="card p-6 mt-4">
+        <h2 class="text-lg font-semibold text-primary mb-3">Actividad reciente</h2>
+        ${activity.posts.length === 0 && activity.comments.length === 0 ? '<p class="text-muted text-sm">Todavía no publicó nada.</p>' : ''}
+        ${activity.posts.length > 0 ? `
+          <h3 class="side-title mt-2">Posts</h3>
+          <div class="space-y-1 mb-4">
+            ${activity.posts.map((p) => `
+              <a href="/post.html?id=${p.id}" class="activity-row">
+                <span class="text-primary font-medium">${escapeHtml(p.title)}</span>
+                <span class="text-muted text-xs">en ${escapeHtml(p.category_name)} · ${timeAgo(p.created_at)}</span>
+              </a>
+            `).join('')}
           </div>
         ` : ''}
-      </div>
-
-      ${activity && (activity.posts.length > 0 || activity.comments.length > 0) ? `
-        <div class="card rounded-lg p-6 mt-4">
-          <h2 class="text-lg font-semibold text-primary mb-4">Actividad reciente</h2>
-
-          ${activity.posts.length > 0 ? `
-            <div class="mb-4">
-              <h3 class="text-sm font-medium text-secondary mb-2">Últimos posts</h3>
-              <div class="space-y-2">
-                ${activity.posts.map(p => `
-                  <a href="/post.html?id=${p.id}" class="block text-sm border-b border-theme pb-2 hover:opacity-80 transition-opacity">
-                    <span class="text-primary link-theme">${escapeHtml(p.title)}</span>
-                    <span class="text-muted ml-2">en ${escapeHtml(p.category_name)}</span>
-                    <span class="text-muted ml-2">· ${new Date(p.created_at).toLocaleDateString('es-AR')}</span>
-                  </a>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-
-          ${activity.comments.length > 0 ? `
-            <div>
-              <h3 class="text-sm font-medium text-secondary mb-2">Últimos comentarios</h3>
-              <div class="space-y-2">
-                ${activity.comments.map(c => `
-                  <a href="/post.html?id=${c.post_id}" class="block text-sm border-b border-theme pb-2 hover:opacity-80 transition-opacity">
-                    <span class="text-muted">Comentó en</span>
-                    <span class="text-primary link-theme ml-1">${escapeHtml(c.post_title)}</span>
-                    <span class="text-muted ml-2">· ${new Date(c.created_at).toLocaleDateString('es-AR')}</span>
-                    <p class="text-secondary text-xs mt-1 line-clamp-1">${escapeHtml(c.content)}</p>
-                  </a>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      ` : ''}
-
-      ${isOwn ? `
-        <div id="edit-profile-form" class="hidden card rounded-lg p-6 mt-4">
-          <h2 class="text-lg font-semibold text-primary mb-4">Editar perfil</h2>
-          <form onsubmit="submitEditProfile(event)" class="space-y-3">
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Username</label>
-              <input type="text" name="username" value="${escapeHtml(data.username)}" required
-                     class="w-full input-field rounded px-3 py-2 text-sm">
-            </div>
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Email</label>
-              <input type="email" name="email" value="${escapeHtml(data.email || '')}" required
-                     class="w-full input-field rounded px-3 py-2 text-sm">
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="text-secondary text-xs mb-1 block">Nombre</label>
-                <input type="text" name="first_name" value="${escapeHtml(data.first_name || '')}"
-                       class="w-full input-field rounded px-3 py-2 text-sm">
-              </div>
-              <div>
-                <label class="text-secondary text-xs mb-1 block">Apellido</label>
-                <input type="text" name="last_name" value="${escapeHtml(data.last_name || '')}"
-                       class="w-full input-field rounded px-3 py-2 text-sm">
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="text-secondary text-xs mb-1 block">Edad</label>
-                <input type="number" name="age" min="14" max="99" value="${data.age || ''}"
-                       class="w-full input-field rounded px-3 py-2 text-sm">
-              </div>
-              <div>
-                <label class="text-secondary text-xs mb-1 block">Comisión</label>
-                <input type="text" name="commission" value="${escapeHtml(data.commission || '')}"
-                       class="w-full input-field rounded px-3 py-2 text-sm">
-              </div>
-            </div>
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Carrera</label>
-              <select name="career" class="w-full input-field rounded px-3 py-2 text-sm">
-                <option value="">Seleccionar carrera</option>
-                ${['Ingenieria en Sistemas', 'Ingenieria Civil', 'Ingenieria Electrica', 'Ingenieria Mecanica', 'Ingenieria Quimica', 'Licenciatura en Administracion', 'Contador Publico', 'Otra'].map(c =>
-                  `<option value="${c}" ${data.career === c ? 'selected' : ''}>${c}</option>`
-                ).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Género</label>
-              <select name="gender" class="w-full input-field rounded px-3 py-2 text-sm">
-                <option value="">Prefiero no decir</option>
-                ${['Masculino', 'Femenino', 'No binario', 'Otro'].map(g =>
-                  `<option value="${g}" ${data.gender === g ? 'selected' : ''}>${g}</option>`
-                ).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Biografía</label>
-              <textarea name="bio" rows="3" maxlength="500" placeholder="Contá algo sobre vos..."
-                        class="w-full input-field rounded px-3 py-2 text-sm">${escapeHtml(data.bio || '')}</textarea>
-            </div>
-            <div class="border-t border-theme pt-3 mt-3">
-              <p class="text-muted text-xs mb-2">Dejar en blanco para no cambiar la contraseña</p>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="text-secondary text-xs mb-1 block">Contraseña actual</label>
-                  <input type="password" name="current_password"
-                         class="w-full input-field rounded px-3 py-2 text-sm">
-                </div>
-                <div>
-                  <label class="text-secondary text-xs mb-1 block">Nueva contraseña</label>
-                  <input type="password" name="new_password"
-                         class="w-full input-field rounded px-3 py-2 text-sm">
-                </div>
-              </div>
-            </div>
-            <div class="flex gap-2">
-              <button type="submit" class="btn-primary px-4 py-1.5 rounded text-sm">Guardar cambios</button>
-              <button type="button" onclick="hideEditProfile()" class="text-muted hover:text-secondary text-sm">Cancelar</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="card rounded-lg p-6 mt-4" style="border: 1px solid var(--red)">
-          <h2 class="text-lg font-semibold mb-2" style="color: var(--red)">Zona de peligro</h2>
-          <p class="text-secondary text-sm mb-4">Eliminar tu cuenta es permanente y no se puede deshacer.</p>
-          <button onclick="showDeleteAccount()" class="px-4 py-2 rounded text-sm font-medium" style="background-color: var(--red-light); color: var(--red)">Eliminar mi cuenta</button>
-        </div>
-
-        <div id="delete-account-form" class="hidden card rounded-lg p-6 mt-4" style="border: 1px solid var(--red)">
-          <h2 class="text-lg font-semibold mb-2" style="color: var(--red)">Confirmar eliminación</h2>
-          <p class="text-secondary text-sm mb-4">Ingresá tu contraseña para confirmar que querés eliminar tu cuenta permanentemente.</p>
-          <form onsubmit="submitDeleteAccount(event)" class="space-y-3">
-            <div>
-              <label class="text-secondary text-xs mb-1 block">Contraseña</label>
-              <input type="password" name="password" required
-                     class="w-full input-field rounded px-3 py-2 text-sm">
-            </div>
-            <div class="flex gap-2">
-              <button type="submit" class="px-4 py-1.5 rounded text-sm font-medium" style="background-color: var(--red); color: white">Eliminar cuenta</button>
-              <button type="button" onclick="hideDeleteAccount()" class="text-muted hover:text-secondary text-sm">Cancelar</button>
-            </div>
-          </form>
-        </div>
-      ` : ''}
+        ${activity.comments.length > 0 ? `
+          <h3 class="side-title mt-2">Comentarios</h3>
+          <div class="space-y-1">
+            ${activity.comments.map((c) => `
+              <a href="/post.html?id=${c.post_id}#comment-${c.id}" class="activity-row">
+                <span class="text-secondary line-clamp-1">“${escapeHtml(c.content)}”</span>
+                <span class="text-muted text-xs">en ${escapeHtml(c.post_title)} · ${timeAgo(c.created_at)}</span>
+              </a>
+            `).join('')}
+          </div>
+        ` : ''}
+      </section>
     `;
-  } catch {
-    container.innerHTML = '<p style="color: var(--red)">Error al cargar el perfil</p>';
+  } catch (err) {
+    container.innerHTML = err.status === 404
+      ? renderEmptyState('Este usuario no existe')
+      : renderEmptyState('No se pudo cargar el perfil', errorMessage(err, ''));
   }
 }
 
-function showEditProfile() {
-  document.getElementById('edit-profile-form').classList.remove('hidden');
+function renderEditForms(data) {
+  const input = 'class="w-full input-field rounded-lg px-3 py-2 text-sm"';
+  return `
+    <section id="edit-profile-form" class="hidden card p-6 mt-4">
+      <h2 class="text-lg font-semibold text-primary mb-4">Editar perfil</h2>
+      <form onsubmit="submitEditProfile(event)" class="space-y-3">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="field-label" for="pf-username">Username</label>
+            <input id="pf-username" type="text" name="username" value="${escapeHtml(data.username)}" required minlength="3" maxlength="30" ${input}></div>
+          <div><label class="field-label" for="pf-email">Email</label>
+            <input id="pf-email" type="email" name="email" value="${escapeHtml(data.email || '')}" required maxlength="100" ${input}></div>
+          <div><label class="field-label" for="pf-first">Nombre</label>
+            <input id="pf-first" type="text" name="first_name" value="${escapeHtml(data.first_name || '')}" maxlength="50" ${input}></div>
+          <div><label class="field-label" for="pf-last">Apellido</label>
+            <input id="pf-last" type="text" name="last_name" value="${escapeHtml(data.last_name || '')}" maxlength="50" ${input}></div>
+          <div><label class="field-label" for="pf-age">Edad</label>
+            <input id="pf-age" type="number" name="age" min="13" max="120" value="${data.age || ''}" ${input}></div>
+          <div><label class="field-label" for="pf-commission">Comisión</label>
+            <input id="pf-commission" type="text" name="commission" value="${escapeHtml(data.commission || '')}" maxlength="30" ${input}></div>
+          <div><label class="field-label" for="pf-career">Carrera</label>
+            <select id="pf-career" name="career" ${input}><option value="">Seleccionar carrera</option>${options(CAREERS, data.career)}</select></div>
+          <div><label class="field-label" for="pf-gender">Género</label>
+            <select id="pf-gender" name="gender" ${input}><option value="">Prefiero no decir</option>${options(GENDERS.map((g) => [g, g]), data.gender)}</select></div>
+        </div>
+        <div><label class="field-label" for="pf-bio">Biografía</label>
+          <textarea id="pf-bio" name="bio" rows="3" maxlength="500" placeholder="Contá algo sobre vos…" ${input}>${escapeHtml(data.bio || '')}</textarea></div>
+
+        <div class="border-t border-theme pt-4 mt-2">
+          <p class="text-muted text-xs mb-3">Cambiar contraseña (dejalo en blanco para no cambiarla). Se cierran tus otras sesiones.</p>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label class="field-label" for="pf-current">Contraseña actual</label>
+              <input id="pf-current" type="password" name="current_password" autocomplete="current-password" ${input}></div>
+            <div><label class="field-label" for="pf-new">Nueva contraseña</label>
+              <input id="pf-new" type="password" name="new_password" minlength="6" maxlength="72" autocomplete="new-password" ${input}></div>
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button type="button" onclick="toggleSection('edit-profile-form')" class="btn-ghost px-4 py-2 rounded-full text-sm">Cancelar</button>
+          <button type="submit" class="btn-primary px-5 py-2 rounded-full text-sm font-semibold">Guardar cambios</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card p-6 mt-4" style="border-color: color-mix(in srgb, var(--red) 40%, var(--border))">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 class="font-semibold" style="color: var(--red)">Eliminar cuenta</h2>
+          <p class="text-secondary text-sm">Se borran tu perfil, tus posts y tus comentarios. No se puede deshacer.</p>
+        </div>
+        <button type="button" onclick="toggleSection('delete-account-form')" class="px-4 py-2 rounded-full text-sm font-medium" style="background-color: var(--red-light); color: var(--red)">Eliminar mi cuenta</button>
+      </div>
+      <form id="delete-account-form" onsubmit="submitDeleteAccount(event)" class="hidden mt-4 space-y-3">
+        <label class="field-label" for="pf-delete-pass">Ingresá tu contraseña para confirmar</label>
+        <input id="pf-delete-pass" type="password" name="password" required autocomplete="current-password" ${input}>
+        <div class="flex justify-end">
+          <button type="submit" class="btn-danger px-5 py-2 rounded-full text-sm font-semibold">Eliminar definitivamente</button>
+        </div>
+      </form>
+    </section>
+  `;
 }
 
-function hideEditProfile() {
-  document.getElementById('edit-profile-form').classList.add('hidden');
-}
-
-function showDeleteAccount() {
-  document.getElementById('delete-account-form').classList.remove('hidden');
-}
-
-function hideDeleteAccount() {
-  document.getElementById('delete-account-form').classList.add('hidden');
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function submitEditProfile(e) {
@@ -303,27 +232,27 @@ async function submitEditProfile(e) {
     const result = await api.put('/auth/profile', body);
     localStorage.setItem('token', result.token);
     localStorage.setItem('user', JSON.stringify(result.user));
-    hideEditProfile();
+    toast('Perfil actualizado', 'success');
+    renderNav();
     loadProfile();
   } catch (err) {
-    alert(err.error || 'Error al actualizar perfil');
+    toast(errorMessage(err, 'Error al actualizar el perfil'), 'error');
   }
 }
 
 async function submitDeleteAccount(e) {
   e.preventDefault();
-  const form = e.target;
-  const password = form.password.value;
+  const password = e.target.password.value;
 
-  if (!confirm('¿Estás completamente seguro? Esta acción elimina tu cuenta permanentemente.')) return;
+  if (!(await confirmDialog('¿Seguro? Tu cuenta y todo lo que publicaste se borran para siempre.', { confirmText: 'Sí, eliminar', danger: true }))) return;
 
   try {
-    await api.delete('/auth/account', { body: JSON.stringify({ password }) });
+    await api.delete('/auth/account', { password });
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/';
   } catch (err) {
-    alert(err.error || 'Error al eliminar la cuenta');
+    toast(errorMessage(err, 'Error al eliminar la cuenta'), 'error');
   }
 }
 
@@ -332,7 +261,7 @@ async function uploadAvatar(e) {
   if (!file) return;
 
   if (file.size > 5 * 1024 * 1024) {
-    alert('La imagen no puede superar 5MB');
+    toast('La imagen no puede superar 5MB', 'error');
     return;
   }
 
@@ -340,24 +269,15 @@ async function uploadAvatar(e) {
   formData.append('avatar', file);
 
   try {
-    const token = localStorage.getItem('token');
-    const res = await fetch('/api/users/avatar', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await api.upload('/users/avatar', formData);
     const user = getUser();
     user.avatar_url = data.avatar_url;
     localStorage.setItem('user', JSON.stringify(user));
-
-    if (typeof renderNav === 'function') renderNav();
+    toast('Foto actualizada', 'success');
+    renderNav();
     loadProfile();
   } catch (err) {
-    alert(err.error || 'Error al subir avatar');
+    toast(errorMessage(err, 'Error al subir la foto'), 'error');
   }
 }
 

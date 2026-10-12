@@ -67,7 +67,7 @@
 | ARC-01 | Capa `services/` + `repositories/` | Controllers mezclan negocio + SQL | Alto | **ACEPTADO** (siguiente tras SEC) |
 | ARC-02 | `asyncHandler` / quitar try/catch repetido | Menos ruido, errores centralizados | Bajo | **ACEPTADO** |
 | ARC-03 | Logging estructurado (Pino) | Observabilidad real | Medio | **DUDANDO** (el dueño no está seguro) |
-| ARC-04 | Graceful shutdown (SIGINT/SIGTERM + pool.end) | No cortar conexiones a medias | Bajo | **ACEPTADO** |
+| ARC-04 | Graceful shutdown (SIGINT/SIGTERM + pool.end) | No cortar conexiones a medias | Bajo | **HECHO** |
 | ARC-05 | Migrar a TypeScript | Tipos | Muy alto | **RECHAZADO** — proyecto personal chico, solo JS |
 | ARC-06 | Dependency Injection | Testing más fácil | Medio | **PENDIENTE** (no se decidió aún) |
 
@@ -84,7 +84,7 @@
 |----|------|---------------------------|----------|----------|
 | FEAT-01 | Paginación / búsqueda mejorada | Ya existe parcial; refinar | Bajo-Medio | **ACEPTADO** |
 | FEAT-02 | Notificaciones + campana (mini menú estilo Facebook) | El dueño la pidió explícitamente | Alto | **ACEPTADO** — pero va en fase de producto, no ahora |
-| FEAT-03 | Edición/eliminación de comentarios con permisos | Esperable en cualquier foro | Medio | **ACEPTADO** |
+| FEAT-03 | Edición/eliminación de comentarios con permisos | Esperable en cualquier foro | Medio | **HECHO** |
 | FEAT-04 | Dark mode / mejora visual frontend | El dueño la pidió pero **para el final** | Medio | **ACEPTADO — ORDEN: ÚLTIMO** |
 | FEAT-05 | Markdown en posts | Útil para apuntes; sin decidir | Medio | **PENDIENTE** |
 | FEAT-06 | Refresh tokens (access 15m + refresh 7d) | Explicado al dueño; sin decidir | Medio | **PENDIENTE** |
@@ -97,7 +97,8 @@
 FASE 0  Entrevista y criterio de "terminado"          [HECHA]
 FASE 1  SEGURIDAD base — SEC-02/03/04/05/06           [COMPLETADA ✅]
         (SEC-01 rechazado; el dueño prueba antes de abrir Fase 2)
-FASE 2  VISTA — rediseño atractivo estilo Reddit      [siguiente — a la espera del dueño]
+AUDIT   Auditoría completa de bugs y seguridad        [HECHA ✅ 2026-10-12]
+FASE 2  VISTA — rediseño atractivo estilo Reddit      [HECHA ✅ 2026-10-12]
 FASE 3  ARQUITECTURA — ARC-01 (services/repos)        [después de que el dueño pruebe Fase 2]
         ARC-02, ARC-04 aceptados (van en su momento)
         ARC-03 dudando; ARC-05 rechazado; ARC-06 sin decidir
@@ -143,6 +144,10 @@ FASE 6  LANZAMIENTO (deploy, dominio, monitoreo)      [por definir]
 | 2026-09-22 | Se ejecuta FASE 1 (SEC-02/03/04/05/06) de una; el dueño prueba al final | Dueño: "primero haz las sec" |
 | 2026-09-22 | **FASE 1 COMPLETADA** — todos los SEC hechos y verificados | Tests 22/22 + smoke HTTP OK |
 | 2026-09-22 | Fix post-SEC-05: `.env` con path absoluto + fail-fast DB + auto-logout front en 401 de token | Token viejo tras rotar secret confundía al dueño |
+| 2026-10-12 | El dueño delega el proyecto completo ("no me preguntes nada") | Auditoría + pulido sin consultas |
+| 2026-10-12 | Auditoría: arreglados registro/perfil/posts/reportes que fallaban por null, página de post rota, XSS (búsqueda, image_url, panel admin), rol leído de DB, sesiones al cambiar contraseña, cascadas peligrosas (categorías, bans) | Ver PR de la rama `claude/auditoria-foro-of171j` |
+| 2026-10-12 | FASE 2 hecha: rediseño estilo Reddit (feed, votos en listado, hilos, admin con pestañas), Tailwind compilado en vez de CDN | Prioridad 2 del dueño |
+| 2026-10-12 | SEC-01 (JWT sin expiración) se respeta como estaba | Decisión previa del dueño |
 
 ---
 
@@ -170,3 +175,4 @@ FASE 6  LANZAMIENTO (deploy, dominio, monitoreo)      [por definir]
 - v0.3 — Todas las decisiones del banco registradas (SEC/ARC/TST/FEAT). Fase 1 en ejecución.
 - v0.4 — Explicación FEAT-06 pendiente de respuesta del dueño.
 - v0.5 — **FASE 1 completada** (SEC-02/03/04/05/06). A la espera de que el dueño pruebe antes de abrir Fase 2 (vista Reddit).
+- v0.6 — **Auditoría + FASE 2 completadas** (2026-10-12). Próximo: FASE 3 (services/repositories) y FASE 4 (tests de integración).

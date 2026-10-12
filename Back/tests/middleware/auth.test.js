@@ -85,7 +85,7 @@ describe('Auth Middleware', () => {
     const payload = { id: 1, username: 'testuser', role: 'alumno', token_version: 1 };
     const token = jwt.sign(payload, JWT_SECRET);
     req.headers.authorization = `Bearer ${token}`;
-    pool.query.mockResolvedValue([[{ token_version: 2 }]]); // DB tiene versión más nueva
+    pool.query.mockResolvedValue([[{ username: 'testuser', role: 'alumno', token_version: 2 }]]); // DB tiene versión más nueva
 
     await auth(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
@@ -97,7 +97,7 @@ describe('Auth Middleware', () => {
     const payload = { id: 1, username: 'testuser', role: 'alumno', token_version: 1 };
     const token = jwt.sign(payload, JWT_SECRET);
     req.headers.authorization = `Bearer ${token}`;
-    pool.query.mockResolvedValue([[{ token_version: 1 }]]);
+    pool.query.mockResolvedValue([[{ username: 'testuser', role: 'alumno', token_version: 1 }]]);
 
     await auth(req, res, next);
     expect(next).toHaveBeenCalled();
@@ -107,14 +107,57 @@ describe('Auth Middleware', () => {
     expect(req.user.role).toBe('alumno');
   });
 
-  test('should set req.user with admin role if token has admin role', async () => {
+  test('should take the role from the DB, not from the token (demoted admin)', async () => {
     const payload = { id: 2, username: 'admin', role: 'admin', token_version: 1 };
     const token = jwt.sign(payload, JWT_SECRET);
     req.headers.authorization = `Bearer ${token}`;
-    pool.query.mockResolvedValue([[{ token_version: 1 }]]);
+    pool.query.mockResolvedValue([[{ username: 'admin', role: 'alumno', token_version: 1 }]]);
 
     await auth(req, res, next);
     expect(next).toHaveBeenCalled();
-    expect(req.user.role).toBe('admin');
+    expect(req.user.role).toBe('alumno');
+  });
+
+  test('should pass DB errors to next instead of answering 401 (no auto-logout)', async () => {
+    const token = jwt.sign({ id: 1, username: 'x', role: 'alumno', token_version: 1 }, JWT_SECRET);
+    req.headers.authorization = `Bearer ${token}`;
+    const dbError = new Error('ECONNREFUSED');
+    pool.query.mockRejectedValue(dbError);
+
+    await auth(req, res, next);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(dbError);
+  });
+});
+
+describe('Auth Middleware (optional)', () => {
+  let req, res, next;
+
+  beforeEach(() => {
+    req = { headers: {} };
+    res = { status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
+    next = jest.fn();
+  });
+
+  test('continues as anonymous without token', async () => {
+    await auth.optional(req, res, next);
+    expect(next).toHaveBeenCalledWith();
+    expect(req.user).toBeUndefined();
+  });
+
+  test('continues as anonymous with an invalid token', async () => {
+    req.headers.authorization = 'Bearer basura';
+    await auth.optional(req, res, next);
+    expect(next).toHaveBeenCalledWith();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(req.user).toBeUndefined();
+  });
+
+  test('sets req.user with a valid token', async () => {
+    const token = jwt.sign({ id: 5, username: 'u', role: 'alumno', token_version: 1 }, JWT_SECRET);
+    req.headers.authorization = `Bearer ${token}`;
+    pool.query.mockResolvedValue([[{ username: 'u', role: 'alumno', token_version: 1 }]]);
+    await auth.optional(req, res, next);
+    expect(req.user.id).toBe(5);
   });
 });

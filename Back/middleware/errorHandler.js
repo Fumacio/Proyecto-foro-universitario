@@ -1,3 +1,4 @@
+const multer = require('multer');
 const { AppError } = require('../utils/errors');
 
 /**
@@ -42,6 +43,14 @@ function errorHandler(err, req, res, _next) {
     const body = { error: err.message };
     if (err.details) body.details = err.details;
     return res.status(err.status).json(body);
+  }
+
+  // Errores de subida de archivos (tamaño, campo inesperado, etc.)
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'La imagen no puede superar 5MB'
+      : 'No se pudo procesar el archivo';
+    return res.status(400).json({ error: message });
   }
 
   // Errores conocidos de Express/body-parser

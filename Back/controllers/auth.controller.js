@@ -1,9 +1,25 @@
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const pool = require('../db/connection');
 const { sendMail } = require('../utils/mailer');
 const { sendError } = require('../utils/response.utils');
+const { signToken } = require('../utils/token');
+
+const USER_FIELDS = 'u.id, u.username, u.email, u.avatar_url, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio, u.token_version, r.name AS role';
+
+/** Datos del usuario que se devuelven al front (sin hash ni token_version) */
+function publicUser(u) {
+  return {
+    id: u.id, username: u.username, email: u.email, role: u.role, avatar_url: u.avatar_url,
+    first_name: u.first_name, last_name: u.last_name, age: u.age, commission: u.commission,
+    career: u.career, gender: u.gender, bio: u.bio
+  };
+}
+
+async function findUserById(id) {
+  const [rows] = await pool.query(`SELECT ${USER_FIELDS} FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?`, [id]);
+  return rows[0];
+}
 
 const register = async (req, res) => {
   try {
@@ -29,12 +45,8 @@ const register = async (req, res) => {
       [username, email, hash, first_name || null, last_name || null, age || null, commission || null, career || null, gender || null, bio || null]
     );
 
-    const token = jwt.sign(
-      { id: result.insertId, username, role: 'alumno', token_version: 1 },
-      process.env.JWT_SECRET
-    );
-
-    res.status(201).json({ token, user: { id: result.insertId, username, email, role: 'alumno', first_name, last_name, age, commission, career, gender, bio: bio || null } });
+    const user = await findUserById(result.insertId);
+    res.status(201).json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
     sendError(res, err, 'Error al registrar usuario');
   }
@@ -49,7 +61,7 @@ const login = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.password_hash, u.avatar_url, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio, u.token_version, r.name AS role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ?',
+      `SELECT ${USER_FIELDS}, u.password_hash FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ?`,
       [email]
     );
 
@@ -64,12 +76,7 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, token_version: user.token_version },
-      process.env.JWT_SECRET
-    );
-
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url, first_name: user.first_name, last_name: user.last_name, age: user.age, commission: user.commission, career: user.career, gender: user.gender, bio: user.bio } });
+    res.json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
     sendError(res, err, 'Error al iniciar sesión');
   }
@@ -77,7 +84,7 @@ const login = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const { username, email, current_password, new_password, first_name, last_name, age, commission, career, gender, bio } = req.body;
+    const { username, email, current_password, new_password } = req.body;
     const userId = req.user.id;
 
     const [existing] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]);
@@ -122,13 +129,15 @@ const updateProfile = async (req, res) => {
       const hash = await bcrypt.hash(new_password, 10);
       fields.push('password_hash = ?');
       values.push(hash);
+      // Cambiar la contraseña cierra las sesiones abiertas en otros dispositivos
+      fields.push('token_version = token_version + 1');
     }
 
     const profileFields = ['first_name', 'last_name', 'age', 'commission', 'career', 'gender', 'bio'];
     for (const field of profileFields) {
       if (req.body[field] !== undefined) {
         fields.push(`${field} = ?`);
-        values.push(req.body[field] || null);
+        values.push(req.body[field] ?? null);
       }
     }
 
@@ -139,18 +148,9 @@ const updateProfile = async (req, res) => {
     values.push(userId);
     await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
 
-    const [updated] = await pool.query(
-      'SELECT u.id, u.username, u.email, u.avatar_url, r.name AS role, u.first_name, u.last_name, u.age, u.commission, u.career, u.gender, u.bio FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?',
-      [userId]
-    );
-
-    const updatedUser = updated[0];
-    const token = jwt.sign(
-      { id: updatedUser.id, username: updatedUser.username, role: updatedUser.role, token_version: updatedUser.token_version || 1 },
-      process.env.JWT_SECRET
-    );
-
-    res.json({ token, user: { id: updatedUser.id, username: updatedUser.username, email: updatedUser.email, role: updatedUser.role, avatar_url: updatedUser.avatar_url, first_name: updatedUser.first_name, last_name: updatedUser.last_name, age: updatedUser.age, commission: updatedUser.commission, career: updatedUser.career, gender: updatedUser.gender, bio: updatedUser.bio } });
+    // El token nuevo lleva el token_version actual (si cambió la contraseña, ya está incrementado)
+    const updatedUser = await findUserById(userId);
+    res.json({ token: signToken(updatedUser), user: publicUser(updatedUser) });
   } catch (err) {
     sendError(res, err, 'Error al actualizar perfil');
   }
@@ -184,6 +184,8 @@ const forgotPassword = async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password.html?token=${token}`;
 
+    // Si el envío falla no se le avisa al cliente: la respuesta tiene que ser la misma
+    // exista o no el email (si no, sirve para averiguar qué emails están registrados)
     await sendMail({
       to: user.email,
       subject: 'Recuperar contraseña - Foro UTN',
@@ -196,7 +198,7 @@ const forgotPassword = async (req, res) => {
           <p style="color: #707070; font-size: 13px;">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este email.</p>
         </div>
       `
-    });
+    }).catch((err) => console.error('[forgotPassword] No se pudo enviar el email:', err.message));
 
     res.json({ message: 'Si el email está registrado, recibirás un enlace de recuperación' });
   } catch (err) {
@@ -237,7 +239,7 @@ const resetPassword = async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?', [hash, reset.user_id]);
-    await pool.query('UPDATE password_resets SET used = 1 WHERE id = ?', [reset.id]);
+    await pool.query('UPDATE password_resets SET used = 1 WHERE user_id = ?', [reset.user_id]);
 
     res.json({ message: 'Contraseña actualizada correctamente' });
   } catch (err) {

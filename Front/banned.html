@@ -3,38 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ForoU - Cuenta Baneada</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Cuenta suspendida · Foro UTN FRT</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/tailwind.css">
   <link rel="stylesheet" href="/css/theme.css">
 </head>
 <body class="min-h-screen">
   <div id="navbar"></div>
 
-  <div class="max-w-md mx-auto px-4 py-16">
-    <div class="card rounded-lg p-8 text-center">
-      <div class="text-5xl mb-4">&#128683;</div>
-      <h1 class="text-2xl font-bold mb-2" style="color: var(--red)">Cuenta baneada</h1>
-      <p class="text-secondary text-sm mb-6">Tu cuenta ha sido suspendida y no podés acceder al foro.</p>
+  <main class="max-w-md mx-auto px-4 py-12">
+    <div class="card auth-card text-center">
+      <div class="text-5xl mb-4" aria-hidden="true">&#128683;</div>
+      <h1 class="text-2xl font-bold mb-2" style="color: var(--red)">Cuenta suspendida</h1>
+      <p class="text-secondary text-sm mb-6">Mientras dure la suspensión no podés publicar, comentar ni votar.</p>
 
-      <div class="rounded-lg p-4 mb-6 text-left space-y-2" style="background-color: var(--bg-input); border: 1px solid var(--border)">
+      <div class="rounded-xl p-4 mb-6 text-left space-y-3" style="background-color: var(--bg-input); border: 1px solid var(--border)">
         <div>
-          <span class="text-muted text-xs">Razón</span>
+          <span class="text-muted text-xs">Motivo</span>
           <p class="text-primary text-sm font-medium" id="ban-reason">-</p>
         </div>
         <div>
-          <span class="text-muted text-xs">Tipo de ban</span>
-          <p class="text-sm" id="ban-type">-</p>
+          <span class="text-muted text-xs">Tipo</span>
+          <p class="text-sm font-medium" id="ban-type">-</p>
         </div>
         <div id="ban-duration-row">
-          <span class="text-muted text-xs">Tiempo restante</span>
+          <span class="text-muted text-xs">Termina</span>
           <p class="text-sm font-medium" id="ban-duration" style="color: var(--orange)">-</p>
         </div>
       </div>
 
-      <p class="text-muted text-xs mb-4">Si creés que esto es un error, contactá a un administrador.</p>
-      <a href="#" onclick="localStorage.removeItem('token');localStorage.removeItem('user');window.location.href='/login.html'" class="link-theme hover:underline text-sm">Cerrar sesión y volver al login</a>
+      <p class="text-muted text-xs mb-4">Si creés que es un error, contactá a un administrador.</p>
+      <button type="button" onclick="logout()" class="btn-secondary px-5 py-2 rounded-full text-sm font-medium">Cerrar sesión</button>
     </div>
-  </div>
+  </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/nav.js"></script>
@@ -53,14 +54,18 @@
         }
 
         document.getElementById('ban-reason').textContent = data.reason;
+        const typeEl = document.getElementById('ban-type');
 
         if (data.type === 'permanent') {
-          document.getElementById('ban-type').innerHTML = '<span style="color: var(--red)">Permanente</span>';
+          typeEl.textContent = 'Permanente';
+          typeEl.style.color = 'var(--red)';
           document.getElementById('ban-duration-row').style.display = 'none';
         } else {
-          document.getElementById('ban-type').innerHTML = '<span style="color: var(--orange)">Temporal</span>';
+          typeEl.textContent = 'Temporal';
+          typeEl.style.color = 'var(--orange)';
           const h = data.hours_left;
-          document.getElementById('ban-duration').textContent = h > 0 ? `${h} hora${h !== 1 ? 's' : ''}` : 'Expirando...';
+          const end = new Date(data.expires_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
+          document.getElementById('ban-duration').textContent = h > 0 ? `${end} (en ${h} hora${h !== 1 ? 's' : ''})` : 'En unos minutos';
         }
       } catch {
         window.location.href = '/';
