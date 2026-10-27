@@ -35,7 +35,9 @@ export function SearchPage() {
   const rawTab = params.get('tab') as Tab | null;
   const tab: Tab = rawTab === 'users' || rawTab === 'communities' ? rawTab : 'posts';
   const [input, setInput] = useState(q);
-  useEffect(() => setInput(q), [q]);
+  useEffect(() => {
+    setInput(q);
+  }, [q]);
   useDocumentTitle(q ? `“${q}” · Búsqueda` : 'Buscar');
 
   const enabled = q.length >= 2;

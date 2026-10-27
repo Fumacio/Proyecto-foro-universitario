@@ -78,7 +78,9 @@ export function CommandPalette() {
     }
   }, [open]);
 
-  useEffect(() => setActive(-1), [debounced]);
+  useEffect(() => {
+    setActive(-1);
+  }, [debounced]);
 
   const items: Item[] = useMemo(() => {
     if (term.length < 2) {

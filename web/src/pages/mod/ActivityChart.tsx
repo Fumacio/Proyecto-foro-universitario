@@ -38,7 +38,7 @@ export function ActivityChart({ data }: { data: ActivityPoint[] }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const height = 240;
-  const m = { top: 14, right: width < 480 ? 16 : 96, bottom: 28, left: 36 };
+  const m = { top: 14, right: width < 480 ? 16 : 124, bottom: 28, left: 36 };
   const iw = Math.max(0, width - m.left - m.right);
   const ih = height - m.top - m.bottom;
   const n = data.length;

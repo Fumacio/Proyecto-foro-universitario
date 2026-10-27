@@ -282,8 +282,10 @@ export function UsersAdmin() {
                       <p className="mt-1 text-xs text-zinc-500">
                         {formatNumber(u.postCount)} posts · {formatNumber(u.commentCount)} comentarios · desde {shortDate(u.createdAt)}
                       </p>
+                      <div className="mt-2">
+                        <BanStatus u={u} />
+                      </div>
                     </div>
-                    <BanStatus u={u} />
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     {roleCell(u)}

@@ -68,7 +68,7 @@ export function NotificationIcon({ n, size = 'lg' }: { n: Notification; size?: '
   const meta = TYPE_META[n.type] ?? TYPE_META.MOD;
   const Icon = meta.icon;
   return (
-    <span className="relative shrink-0">
+    <span className="relative flex shrink-0 self-start">
       {n.actor && n.type !== 'MOD' ? (
         <Avatar user={n.actor} size={size} />
       ) : (
@@ -100,7 +100,7 @@ export function NotificationItem({ n, onOpen, dense }: { n: Notification; onOpen
       <div className="min-w-0 flex-1">
         <p className={cn('text-zinc-600 dark:text-zinc-400', dense ? 'line-clamp-2 text-[13px]' : 'text-sm')}>{notificationText(n)}</p>
         {n.comment?.excerpt && (
-          <p className={cn('mt-1 line-clamp-2 rounded-lg border-l-2 border-zinc-200 pl-2 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400', dense ? 'text-xs' : 'text-[13px]')}>
+          <p className={cn('mt-1 line-clamp-2 border-l-2 border-zinc-200 pl-2 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400', dense ? 'text-xs' : 'text-[13px]')}>
             {n.comment.excerpt}
           </p>
         )}

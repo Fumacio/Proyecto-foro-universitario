@@ -409,7 +409,9 @@ export default function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tab') as Tab | null;
   const tab: Tab = raw && TABS.some((t) => t.value === raw) ? raw : 'profile';
-  useEffect(() => window.scrollTo({ top: 0 }), [tab]);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [tab]);
   if (!me) return null;
 
   return (

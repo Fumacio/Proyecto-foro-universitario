@@ -88,7 +88,9 @@ function CommunityPicker({
     return sorted.filter((c) => !f || c.name.toLowerCase().includes(f) || c.slug.includes(f));
   }, [communities, filter]);
 
-  useEffect(() => setActive(0), [filter]);
+  useEffect(() => {
+    setActive(0);
+  }, [filter]);
 
   const choose = (c: Community) => {
     onChange(c);
@@ -360,13 +362,13 @@ export default function SubmitPage() {
               aria-selected={type === t.value}
               onClick={() => setType(t.value)}
               className={cn(
-                'relative flex h-12 flex-1 shrink-0 items-center justify-center gap-2 px-4 text-sm font-medium transition-colors',
+                'relative flex h-12 flex-1 shrink-0 items-center justify-center gap-2 px-2.5 text-[13px] font-medium transition-colors sm:px-4 sm:text-sm',
                 type === t.value
                   ? 'text-brand-700 dark:text-brand-300'
                   : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-200',
               )}
             >
-              <t.icon className="size-4" />
+              <t.icon className="hidden size-4 min-[400px]:block" />
               {t.label}
               <span className={cn('absolute inset-x-3 bottom-0 h-0.5 rounded-full', type === t.value ? 'bg-brand-600 dark:bg-brand-400' : 'bg-transparent')} />
             </button>

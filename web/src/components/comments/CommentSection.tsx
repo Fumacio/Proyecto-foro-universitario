@@ -178,9 +178,13 @@ function CommentItem({ c, depth, flat, replyTo }: { c: Comment; depth: number; f
               <CirclePlus className="size-5" />
             </button>
           ) : (
-            <Link to={c.author ? `/u/${c.author.username}` : '#'} aria-hidden tabIndex={-1}>
-              <Avatar user={c.isDeleted ? null : c.author} size="sm" className="sm:size-7" />
-            </Link>
+            c.author && !c.isDeleted ? (
+              <Link to={`/u/${c.author.username}`} aria-hidden tabIndex={-1}>
+                <Avatar user={c.author} size="sm" className="sm:size-7" />
+              </Link>
+            ) : (
+              <Avatar user={null} size="sm" className="sm:size-7" />
+            )
           )}
           {!collapsed && (hasChildren || replying) && (
             <button

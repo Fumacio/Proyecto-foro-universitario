@@ -221,7 +221,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
   const tools: { icon: LucideIcon; label: string; run: () => void; hidden?: boolean }[] = [
     { icon: Bold, label: `Negrita (${mod}+B)`, run: () => wrap('**', '**', 'texto en negrita') },
     { icon: Italic, label: `Cursiva (${mod}+I)`, run: () => wrap('_', '_', 'texto en cursiva') },
-    { icon: Heading2, label: 'Título', run: () => prefixLines(() => '## ', /^#{1,6} /) },
+    { icon: Heading2, label: 'Encabezado', run: () => prefixLines(() => '## ', /^#{1,6} /) },
     { icon: Link2, label: 'Link', run: insertLink },
     { icon: Code, label: 'Código', run: insertCode },
     { icon: Quote, label: 'Cita', run: () => prefixLines(() => '> ', /^> ?/) },

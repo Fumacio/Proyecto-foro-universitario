@@ -401,7 +401,7 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
           }}
           placeholder="Escribí un mensaje…"
           aria-label="Mensaje"
-          className="max-h-36 min-h-10 flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[14.5px] leading-snug focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-brand-400"
+          className="max-h-36 min-h-10 flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[14.5px] leading-snug focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-brand-400 dark:focus:bg-zinc-900"
         />
         <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Enviar" disabled={!text.trim()} loading={send.isPending}>
           <SendHorizontal />
