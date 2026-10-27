@@ -340,3 +340,164 @@ Cuentas (todas con contraseña **`foro1234`**):
 | `moderadora` | mod@foro.utn | MODERATOR |
 | `prof_garcia` | garcia@foro.utn | PROFESSOR |
 | `lucia_dev`, `tomi_ing`, `sofi_mate`, `nico_frt`, `vale_sistemas` | `<usuario>@foro.utn` | STUDENT |
+
+---
+
+# v2.1 — Nuevas funciones
+
+Login con Google · reacciones con emojis · borradores · avisos por mail · PWA · archivos adjuntos (PDF, Word, Excel, PowerPoint, imágenes, zip, código…).
+Todo lo de arriba sigue igual salvo los **campos agregados** que se marcan acá.
+
+## Tipos nuevos y campos agregados
+```ts
+// ---------- Reacciones ----------
+// Conjunto fijo (el server rechaza cualquier otro con 400):
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🤔', '🔥'] as const;
+type ReactionEmoji = typeof REACTIONS[number];
+interface ReactionSummary { emoji: ReactionEmoji; count: number; reacted: boolean /* el usuario actual reaccionó con este */ }
+// Se devuelven solo los emojis con count > 0, en el orden de REACTIONS.
+
+// ---------- Adjuntos ----------
+type AttachmentKind = 'IMAGE' | 'PDF' | 'DOCUMENT' | 'SPREADSHEET' | 'PRESENTATION' | 'ARCHIVE' | 'TEXT' | 'OTHER';
+interface Attachment {
+  id: number;
+  filename: string;          // nombre original saneado, p. ej. "Resumen Parcial 1.pdf"
+  mimeType: string;
+  size: number;              // bytes
+  kind: AttachmentKind;
+  url: string;               // descarga: "/api/attachments/:id/download"
+  previewUrl: string | null; // vista en el navegador (solo IMAGE y PDF): "/api/attachments/:id/view"
+  downloadCount: number;
+  createdAt: string;
+}
+
+// ---------- Preferencias ----------
+interface Preferences {
+  emailReplies: boolean;     // POST_REPLY, COMMENT_REPLY, ANSWER_ACCEPTED (default true)
+  emailMentions: boolean;    // MENTION (default true)
+  emailMessages: boolean;    // mensajes directos (default true)
+  emailFollows: boolean;     // FOLLOW (default false)
+  emailReactions: boolean;   // REACTION (default false)
+}
+
+// ---------- Borradores ----------
+interface Draft {
+  id: number;
+  communityId: number | null;
+  type: PostType;
+  title: string;             // puede ser ""
+  body: string;
+  url: string | null;
+  imageUrl: string | null;
+  tagIds: number[];
+  poll: { options: string[]; closesInDays: number | null } | null;
+  attachments: Attachment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------- Campos agregados a tipos existentes ----------
+interface Me {
+  // ...campos de antes
+  hasPassword: boolean;      // false si la cuenta se creó con Google y nunca puso contraseña
+  googleLinked: boolean;
+  preferences: Preferences;
+  draftCount: number;
+}
+interface PostListItem {
+  // ...campos de antes
+  reactions: ReactionSummary[];
+  attachmentCount: number;
+}
+interface PostDetail {
+  // ...campos de antes
+  attachments: Attachment[];
+}
+interface Comment {
+  // ...campos de antes (también CommentWithPost)
+  reactions: ReactionSummary[];
+  attachments: Attachment[];   // [] si isDeleted
+}
+interface Message {
+  // ...campos de antes
+  attachments: Attachment[];
+}
+type NotificationType = 'POST_REPLY' | 'COMMENT_REPLY' | 'MENTION' | 'FOLLOW' | 'ANSWER_ACCEPTED' | 'MOD' | 'REACTION';
+// REACTION: actor reaccionó a tu post o comentario. `message` = el emoji. Solo la primera reacción de ese actor a ese contenido.
+```
+
+## Login con Google
+| Método | Ruta | Respuesta |
+|---|---|---|
+| GET | `/auth/providers` | `{ google: boolean }` (true si están `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`) |
+| GET | `/auth/google?next=/ruta` | `302` a Google (OAuth 2.0 authorization code, scopes `openid email profile`, `state` aleatorio en cookie httpOnly de 10 min). 404 si no está configurado |
+| GET | `/auth/google/callback?code&state` | Valida `state`, cambia el code por tokens, lee el perfil (exige `email_verified`). Busca por `googleId`; si no, por email (y vincula); si no, crea la cuenta (username derivado del email, único; displayName y avatar de Google; sin contraseña). Setea la cookie de sesión y hace `302` a `${FRONTEND_URL}${next}` (next solo rutas relativas internas). Si falla: `302` a `${FRONTEND_URL}/login?error=google` |
+
+- `redirect_uri` = `${FRONTEND_URL}/api/auth/google/callback` (en dev pasa por el proxy de Vite, en prod es el mismo server). Va en el README cómo crear las credenciales en Google Cloud Console.
+- Cuentas sin contraseña: `POST /auth/change-password` acepta `currentPassword` vacío/ausente **solo si** `hasPassword=false` (así ponen una). `DELETE /users/me` acepta `{ password }` o, si `hasPassword=false`, `{ confirmUsername }`.
+- Login con usuario/contraseña a una cuenta sin contraseña → 401 con mensaje "Esta cuenta usa Google para iniciar sesión".
+
+## Reacciones
+| Método | Ruta | Body | Respuesta |
+|---|---|---|---|
+| POST 🔒 | `/posts/:id/reactions` | `{ emoji }` | `{ reactions: ReactionSummary[] }` (**toggle**: si ya tenía ese emoji lo saca) |
+| POST 🔒 | `/comments/:id/reactions` | `{ emoji }` | `{ reactions: ReactionSummary[] }` (toggle; 404 si el comentario está borrado) |
+| GET | `/posts/:id/reactions/users?emoji=` | — | `{ items: UserSummary[] }` (hasta 50, para el tooltip "quién reaccionó") |
+| GET | `/comments/:id/reactions/users?emoji=` | — | `{ items: UserSummary[] }` |
+
+Un usuario puede tener varias reacciones distintas en el mismo contenido (una por emoji). Baneados → 403 BANNED.
+
+## Adjuntos
+| Método | Ruta | Body/Query | Respuesta |
+|---|---|---|---|
+| POST 🔒 | `/attachments` | multipart `file` | `201 { attachment: Attachment }` (queda "suelto", del usuario, hasta que se use) |
+| DELETE 🔒 | `/attachments/:id` | — | `204` (solo el que lo subió, o 🛡; borra el archivo) |
+| GET | `/attachments/:id/download` | — | el archivo con `Content-Disposition: attachment; filename*=UTF-8''…` (suma downloadCount) |
+| GET | `/attachments/:id/view` | — | IMAGE/PDF inline (`Content-Disposition: inline`), resto 404 |
+
+- Se usan pasando `attachmentIds: number[]` en: `POST /posts` (máx 10), `PATCH /posts/:id` (reemplaza la lista; los quitados se borran), `POST /posts/:id/comments` y `PATCH /comments/:id` (máx 5), `POST /conversations/:id/messages` (máx 5; en mensajes el `body` puede ser "" si hay al menos un adjunto). También en borradores.
+  El server verifica que cada id sea del usuario y esté suelto (o ya sea de ese mismo post/comentario/borrador); si no → 400.
+- **Tipos permitidos** (por extensión **y** verificando el contenido real / magic bytes):
+  - IMAGE: png, jpg/jpeg, gif, webp
+  - PDF: pdf
+  - DOCUMENT: doc, docx, odt, rtf
+  - SPREADSHEET: xls, xlsx, ods, csv
+  - PRESENTATION: ppt, pptx, odp
+  - ARCHIVE: zip, rar, 7z
+  - TEXT: txt, md, y código (c, h, cpp, hpp, cs, java, py, js, ts, sql, json, xml, html, css, ipynb) — se validan como texto UTF-8 sin bytes nulos y **siempre** se descargan como `attachment` con `text/plain` (nunca se renderizan).
+  - Cualquier otra cosa → 400 "Tipo de archivo no permitido". SVG no se permite.
+- Tamaño máx **25 MB** por archivo (`MAX_UPLOAD_MB`). Cuota: 200 MB por usuario por día.
+- Seguridad al servir: `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox` en las respuestas de archivos, `Cache-Control: private, max-age=3600`.
+- Borrar post / comentario / mensaje / borrador borra sus adjuntos (archivo incluido). Los adjuntos sueltos con más de 24 h se limpian solos (tarea cada hora).
+- `GET /posts` acepta `hasAttachments=true` (feed "Con archivos").
+- Adjuntos de mensajes directos: solo los participantes de la conversación pueden descargarlos/verlos (403 si no).
+
+## Borradores
+| Método | Ruta | Body | Respuesta |
+|---|---|---|---|
+| GET 🔒 | `/drafts` | — | `{ items: Draft[] }` (orden updatedAt desc, máx 50 por usuario) |
+| POST 🔒 | `/drafts` | campos de `Draft` (todos opcionales) + `attachmentIds?` | `201 { draft }` |
+| GET 🔒 | `/drafts/:id` | — | `{ draft }` (404 si no es tuyo) |
+| PATCH 🔒 | `/drafts/:id` | parcial + `attachmentIds?` | `{ draft }` |
+| DELETE 🔒 | `/drafts/:id` | — | `204` |
+
+`POST /posts` acepta `draftId?`: al publicar, los adjuntos pasan al post y el borrador se borra.
+Validación laxa (un borrador puede estar incompleto), pero con los mismos máximos de longitud que un post.
+
+## Preferencias y avisos por mail
+| Método | Ruta | Body | Respuesta |
+|---|---|---|---|
+| GET 🔒 | `/users/me/preferences` | — | `{ preferences: Preferences }` |
+| PATCH 🔒 | `/users/me/preferences` | parcial de `Preferences` | `{ preferences: Preferences }` |
+
+- Cuando se crea una notificación (o llega un mensaje directo) y el destinatario tiene esa preferencia activa **y no está conectado** (sin conexión SSE abierta), se le manda un mail lindo (HTML + texto) con el contenido y un botón al lugar exacto.
+- Anti-spam: máx 1 mail por (usuario, tipo, post/conversación) cada 15 min; máx 20 mails por usuario por día.
+- Mail de bienvenida al registrarse (también con Google).
+- Sin SMTP configurado: en dev se loguea en consola `[mail] → para: asunto` y el link; nunca rompe la request (envío asíncrono, errores solo al log).
+- El footer de cada mail tiene link a `${FRONTEND_URL}/settings?tab=notifications`.
+
+## PWA
+- `web/public/manifest.webmanifest` (nombre "Foro UTN", `display: standalone`, colores de marca, íconos 192/512 + maskable, `start_url: "/"`, shortcuts a Crear post / Notificaciones / Mensajes).
+- `web/public/sw.js` escrito a mano: precache del shell, navegación network-first con fallback offline (`/offline.html`), assets con hash cache-first, `/uploads/*` stale-while-revalidate, **nunca** cachea `/api/*`. Se registra solo en producción.
+- El server sirve `sw.js`, `manifest.webmanifest` e `index.html` con `Cache-Control: no-cache`.
+- Botón "Instalar app" (evento `beforeinstallprompt`; en iOS un diálogo con instrucciones "Compartir → Agregar a inicio").

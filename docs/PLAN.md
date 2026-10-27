@@ -57,3 +57,9 @@ con un solo comando y datos de ejemplo.
 3. **Frontend** (en paralelo) — sistema de diseño y todas las páginas contra `docs/API.md`.
 4. **Integración / QA** — levantar todo, recorrer los flujos con Playwright, arreglar diferencias,
    capturas, README, limpieza del código viejo.
+
+## Fase 2 (v2.1)
+Login con Google, reacciones con emojis, borradores sincronizados, avisos por mail con preferencias,
+PWA instalable con modo offline y archivos adjuntos (PDF, Word, Excel, PowerPoint, imágenes, zip, código)
+en posts, comentarios y mensajes. Contrato en `docs/API.md` (sección v2.1). Mismo esquema:
+subagente de backend y de frontend en paralelo, después integración y QA.
