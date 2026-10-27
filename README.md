@@ -25,7 +25,9 @@ Consultas de parcial · apuntes · encuestas · mensajes · todo en un solo luga
   <img src="docs/screenshots/home-dark.png" alt="Modo oscuro" width="440">
   <br><br>
   <img src="docs/screenshots/messages.png" alt="Mensajes directos" width="440">
-  <img src="docs/screenshots/mobile.png" alt="Versión móvil" width="200">
+  <img src="docs/screenshots/mod.png" alt="Panel de moderación" width="440">
+  <br><br>
+  <img src="docs/screenshots/mobile.png" alt="Versión móvil" width="260">
 </div>
 
 ---
