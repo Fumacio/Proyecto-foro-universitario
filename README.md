@@ -38,13 +38,17 @@ Consultas de parcial · apuntes · encuestas · mensajes · todo en un solo luga
 |------|-----------|
 | **Comunidades** | Una por materia o tema, con ícono, color y reglas. Te unís y armás tu feed |
 | **Posts** | Texto, **pregunta** (con respuesta aceptada ✓), **encuesta**, link. Markdown con vista previa, imágenes (pegar / arrastrar), etiquetas, editar y borrar |
+| **Archivos adjuntos** | PDF, Word, Excel, PowerPoint, imágenes, zip y código en posts, comentarios y mensajes. Barra de progreso, vista previa de PDF e imágenes, filtro "Con archivos" |
+| **Reacciones** | 👍 ❤️ 😂 😮 😢 🎉 🤔 🔥 en posts y comentarios, con "quién reaccionó" |
+| **Borradores** | El post se guarda solo mientras lo escribís y lo seguís desde cualquier dispositivo |
 | **Comentarios** | Hilos anidados que se colapsan, markdown, menciones `@usuario`, votos |
 | **Feeds** | Hot · Nuevos · Top (día / semana / mes / año) · Más comentados · Siguiendo · Sin responder · Guardados. Scroll infinito, vista tarjeta o compacta |
 | **Búsqueda** | Paleta de comandos con `Ctrl/⌘ + K`: posts, usuarios y comunidades |
 | **Social** | Perfiles con karma, seguir usuarios, **mensajes directos en tiempo real** |
-| **Notificaciones** | En vivo (SSE): respuestas, menciones, seguidores, respuesta aceptada, moderación |
+| **Notificaciones** | En vivo (SSE): respuestas, menciones, reacciones, seguidores, respuesta aceptada, moderación. **Avisos por mail** cuando no estás conectado, configurables |
 | **Moderación** | Reportes, cola de moderación, bans temporales / permanentes, fijar y cerrar posts, roles `ADMIN` · `MODERATOR` · `PROFESSOR` · `STUDENT`, panel con métricas |
-| **Cuenta** | Registro, login con email o usuario, recuperar contraseña, cambiar contraseña (cierra otras sesiones), avatar, borrar cuenta |
+| **Cuenta** | Registro, login con email o usuario, **login con Google**, recuperar contraseña, cambiar contraseña (cierra otras sesiones), avatar, borrar cuenta |
+| **App** | **Se instala en el celu o la compu** (PWA), funciona offline con una pantalla propia |
 | **Diseño** | Claro / oscuro / sistema, responsive con barra inferior en el celu, skeletons, toasts, accesible por teclado |
 
 ---
@@ -98,9 +102,27 @@ si corre detrás de un proxy, `TRUST_PROXY=1`.
 | `FRONTEND_URL` | URL del front, para los links de los emails (dev: `http://localhost:5173`) |
 | `DATABASE_URL` | Default `file:./dev.db` (SQLite) |
 | `JWT_SECRET` | Firma de las sesiones — largo, aleatorio y nunca a Git |
-| `SMTP_*` | Opcional. Sin SMTP, el link para recuperar la contraseña se imprime en la consola |
+| `SMTP_*` | Opcional. Mails de recuperación, bienvenida y avisos. Sin SMTP se imprimen en la consola |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Opcional. Activa "Continuar con Google" (ver abajo) |
+| `MAX_UPLOAD_MB` | Opcional. Tamaño máximo por archivo adjunto (default `25`) |
 | `TRUST_PROXY` | Opcional. `1` detrás de Render / Railway / Nginx |
 | `COOKIE_SECURE` | Opcional. En producción la sesión exige HTTPS; poné `false` si lo servís por HTTP (red local) |
+
+### Login con Google (opcional)
+
+1. Entrá a [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → **Crear credenciales** → **ID de cliente de OAuth** → tipo **Aplicación web**.
+2. En **URIs de redireccionamiento autorizados** agregá `http://localhost:5173/api/auth/google/callback`
+   (y en producción `https://tu-dominio/api/auth/google/callback`, o sea `FRONTEND_URL` + `/api/auth/google/callback`).
+3. Copiá el ID y el secreto en `server/.env` como `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` y reiniciá. El botón aparece solo.
+
+### Mails con Gmail (opcional)
+
+Activá la verificación en dos pasos, creá una [contraseña de aplicación](https://myaccount.google.com/apppasswords) y poné en `server/.env`:
+`SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=tu@gmail.com`, `SMTP_PASS=<la contraseña de aplicación>`.
+
+### Instalar como app
+
+En producción (HTTPS) el navegador ofrece **Instalar**; también está en el menú de tu avatar. En iPhone: Compartir → *Agregar a inicio*.
 
 **¿Postgres o MySQL?** Cambiá `provider` en `server/prisma/schema.prisma` y `DATABASE_URL`, y corré `npm run setup`.
 
