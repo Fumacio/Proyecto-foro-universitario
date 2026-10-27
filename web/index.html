@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fafafa" />
+    <meta name="description" content="Foro UTN — la comunidad de estudiantes y docentes de la UTN Facultad Regional Tucumán." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Foro UTN</title>
+    <script>
+      // Aplica el tema guardado antes del primer paint para evitar el "flash".
+      (function () {
+        try {
+          var stored = localStorage.getItem('foro:theme');
+          var theme = stored ? JSON.parse(stored) : 'system';
+          var dark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          if (dark) root.classList.add('dark');
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#09090b' : '#fafafa');
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Foro UTN necesita JavaScript para funcionar.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

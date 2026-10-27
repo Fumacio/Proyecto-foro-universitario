@@ -8,9 +8,11 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:setup": "prisma db push && tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "make-admin": "tsx scripts/make-admin.ts"
+    "db:setup": "tsx scripts/ensure-env.ts && prisma db push && tsx prisma/seed.ts",
+    "db:reset": "tsx scripts/ensure-env.ts && prisma db push --force-reset && tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts",
+    "make-admin": "tsx scripts/make-admin.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

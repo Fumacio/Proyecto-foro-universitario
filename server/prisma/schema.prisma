@@ -1,0 +1,401 @@
+// Foro UTN v2 — esquema de datos.
+// SQLite por defecto (cero instalación). Para Postgres/MySQL alcanza con cambiar `provider`
+// y `DATABASE_URL`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MODERATOR
+  PROFESSOR
+  STUDENT
+}
+
+enum PostType {
+  TEXT
+  QUESTION
+  POLL
+  LINK
+}
+
+enum NotificationType {
+  POST_REPLY
+  COMMENT_REPLY
+  MENTION
+  FOLLOW
+  ANSWER_ACCEPTED
+  MOD
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE
+  OFF_TOPIC
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  /// username en minúsculas: unicidad y búsquedas case-insensitive
+  usernameKey  String   @unique
+  /// siempre en minúsculas
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  bio          String?
+  career       String?
+  avatarUrl    String?
+  role         Role     @default(STUDENT)
+  /// se incrementa al cambiar/resetear la contraseña: invalida los JWT viejos
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  posts                Post[]
+  comments             Comment[]
+  memberships          Membership[]
+  postVotes            PostVote[]
+  commentVotes         CommentVote[]
+  pollVotes            PollVote[]
+  bookmarks            Bookmark[]
+  followers            Follow[]                  @relation("FollowTarget")
+  following            Follow[]                  @relation("FollowSource")
+  notifications        Notification[]            @relation("NotificationRecipient")
+  notificationsActed   Notification[]            @relation("NotificationActor")
+  participations       ConversationParticipant[]
+  conversationsCreated Conversation[]
+  messages             Message[]
+  reportsFiled         Report[]                  @relation("ReportReporter")
+  reportsResolved      Report[]                  @relation("ReportResolver")
+  bans                 Ban[]                     @relation("BanTarget")
+  bansIssued           Ban[]                     @relation("BanIssuer")
+  bansLifted           Ban[]                     @relation("BanLifter")
+  passwordResets       PasswordReset[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Community {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  name        String   @unique
+  description String   @default("")
+  icon        String   @default("💬")
+  color       String   @default("#2563eb")
+  /// string[]
+  rules       Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  posts       Post[]
+  memberships Membership[]
+}
+
+model Membership {
+  userId      Int
+  communityId Int
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@id([userId, communityId])
+  @@index([communityId])
+}
+
+model Tag {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  slug      String    @unique
+  color     String    @default("#64748b")
+  createdAt DateTime  @default(now())
+  posts     PostTag[]
+}
+
+model Post {
+  id                Int       @id @default(autoincrement())
+  type              PostType  @default(TEXT)
+  title             String
+  /// markdown crudo
+  body              String    @default("")
+  url               String?
+  imageUrl          String?
+  authorId          Int?
+  communityId       Int
+  /// suma de votos (desnormalizado)
+  score             Int       @default(0)
+  /// sign(score)*log10(max(|score|,1)) + createdAtEpochSec/45000
+  hot               Float     @default(0)
+  /// comentarios no borrados (desnormalizado)
+  commentCount      Int       @default(0)
+  viewCount         Int       @default(0)
+  isPinned          Boolean   @default(false)
+  isLocked          Boolean   @default(false)
+  /// comentario aceptado (solo QUESTION). Sin FK para evitar el ciclo Post<->Comment.
+  acceptedCommentId Int?
+  pollClosesAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  editedAt          DateTime?
+
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  community     Community      @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  tags          PostTag[]
+  comments      Comment[]
+  votes         PostVote[]
+  bookmarks     Bookmark[]
+  pollOptions   PollOption[]
+  pollVotes     PollVote[]
+  notifications Notification[]
+  reports       Report[]
+
+  @@index([hot])
+  @@index([createdAt])
+  @@index([score])
+  @@index([commentCount])
+  @@index([communityId, isPinned, hot])
+  @@index([communityId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([type, acceptedCommentId])
+}
+
+model PostTag {
+  postId Int
+  tagId  Int
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+}
+
+model PollOption {
+  id       Int        @id @default(autoincrement())
+  postId   Int
+  text     String
+  position Int        @default(0)
+  post     Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  votes    PollVote[]
+
+  @@index([postId, position])
+}
+
+/// un voto por usuario y encuesta (se puede cambiar de opción)
+model PollVote {
+  postId    Int
+  userId    Int
+  optionId  Int
+  createdAt DateTime   @default(now())
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([optionId])
+  @@index([userId])
+}
+
+model Comment {
+  id        Int       @id @default(autoincrement())
+  postId    Int
+  parentId  Int?
+  authorId  Int?
+  body      String
+  /// soft delete: queda en el árbol como "[eliminado]"
+  isDeleted Boolean   @default(false)
+  score     Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  editedAt  DateTime?
+
+  post          Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent        Comment?       @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies       Comment[]      @relation("CommentThread")
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  votes         CommentVote[]
+  notifications Notification[]
+  reports       Report[]
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+  @@index([authorId, createdAt])
+}
+
+model PostVote {
+  userId    Int
+  postId    Int
+  /// 1 | -1
+  value     Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model CommentVote {
+  userId    Int
+  commentId Int
+  /// 1 | -1
+  value     Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
+}
+
+model Bookmark {
+  userId    Int
+  postId    Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([userId, createdAt])
+  @@index([postId])
+}
+
+model Follow {
+  followerId  Int
+  followingId Int
+  createdAt   DateTime @default(now())
+  follower    User     @relation("FollowSource", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("FollowTarget", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId, createdAt])
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  actorId   Int?
+  postId    Int?
+  commentId Int?
+  message   String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  post      Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment   Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([actorId])
+  @@index([postId])
+  @@index([commentId])
+}
+
+model Conversation {
+  id           Int                       @id @default(autoincrement())
+  /// "<idMenor>:<idMayor>" — una sola conversación por par de usuarios
+  key          String                    @unique
+  createdById  Int?
+  createdAt    DateTime                  @default(now())
+  /// se actualiza con cada mensaje
+  updatedAt    DateTime                  @default(now())
+  createdBy    User?                     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  conversationId Int
+  userId         Int
+  lastReadAt     DateTime     @default(now())
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  body           String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, id])
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model Report {
+  id           Int          @id @default(autoincrement())
+  reporterId   Int?
+  postId       Int?
+  commentId    Int?
+  reason       ReportReason
+  details      String?
+  status       ReportStatus @default(PENDING)
+  resolvedById Int?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  reporter     User?        @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  resolvedBy   User?        @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  post         Post?        @relation(fields: [postId], references: [id], onDelete: SetNull)
+  comment      Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([postId])
+  @@index([commentId])
+}
+
+model Ban {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  bannedById Int?
+  reason     String
+  /// null = permanente
+  expiresAt  DateTime?
+  liftedAt   DateTime?
+  liftedById Int?
+  createdAt  DateTime  @default(now())
+  user       User      @relation("BanTarget", fields: [userId], references: [id], onDelete: Cascade)
+  bannedBy   User?     @relation("BanIssuer", fields: [bannedById], references: [id], onDelete: SetNull)
+  liftedBy   User?     @relation("BanLifter", fields: [liftedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([liftedAt, expiresAt])
+}
+
+model PasswordReset {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  /// sha256 (hex) del token enviado por email
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
