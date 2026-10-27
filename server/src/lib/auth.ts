@@ -10,7 +10,7 @@ const BCRYPT_COST = 10;
 const baseCookie: CookieOptions = {
   httpOnly: true,
   sameSite: 'lax',
-  secure: env.isProd,
+  secure: env.COOKIE_SECURE,
   path: '/',
 };
 

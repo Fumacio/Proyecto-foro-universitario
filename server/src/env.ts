@@ -71,6 +71,8 @@ export const env = {
     '',
   ),
   JWT_SECRET: resolveJwtSecret(),
+  // Cookie `Secure` (solo HTTPS). Por defecto en producción; COOKIE_SECURE=false para servir por HTTP (p. ej. una red local).
+  COOKIE_SECURE: process.env.COOKIE_SECURE?.trim() ? process.env.COOKIE_SECURE.trim() !== 'false' : isProd,
   TRUST_PROXY: parseTrustProxy(process.env.TRUST_PROXY),
   SMTP: {
     host: process.env.SMTP_HOST?.trim() || '',

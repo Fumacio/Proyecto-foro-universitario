@@ -67,7 +67,7 @@ export function createApp(): express.Express {
         : false,
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'same-site' },
-      strictTransportSecurity: env.isProd,
+      strictTransportSecurity: env.isProd && env.COOKIE_SECURE,
     }),
   );
   // SSE no se comprime: la compresión bufferea y los eventos no llegarían en vivo.

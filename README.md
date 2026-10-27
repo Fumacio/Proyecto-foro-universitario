@@ -100,6 +100,7 @@ si corre detrás de un proxy, `TRUST_PROXY=1`.
 | `JWT_SECRET` | Firma de las sesiones — largo, aleatorio y nunca a Git |
 | `SMTP_*` | Opcional. Sin SMTP, el link para recuperar la contraseña se imprime en la consola |
 | `TRUST_PROXY` | Opcional. `1` detrás de Render / Railway / Nginx |
+| `COOKIE_SECURE` | Opcional. En producción la sesión exige HTTPS; poné `false` si lo servís por HTTP (red local) |
 
 **¿Postgres o MySQL?** Cambiá `provider` en `server/prisma/schema.prisma` y `DATABASE_URL`, y corré `npm run setup`.
 
