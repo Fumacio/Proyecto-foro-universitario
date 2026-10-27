@@ -1,40 +1,23 @@
 {
-  "name": "proyecto-foro-universitario",
-  "version": "1.0.0",
-  "description": "Foro universitario UTN FRT",
-  "main": "Back/server.js",
+  "name": "foro-utn",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Foro universitario UTN FRT — React + Express + Prisma",
   "scripts": {
-    "start": "node Back/server.js",
-    "dev": "node --watch Back/server.js",
-    "test": "jest",
-    "make-admin": "node Back/scripts/make-admin.js",
-    "build:css": "tailwindcss -i Front/css/tailwind.input.css -o Front/css/tailwind.css --minify",
-    "watch:css": "tailwindcss -i Front/css/tailwind.input.css -o Front/css/tailwind.css --watch"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "bcrypt": "^6.0.0",
-    "compression": "^1.8.2",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
-    "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^2.2.0",
-    "mysql2": "^3.23.3",
-    "nodemailer": "^9.0.6",
-    "zod": "^4.6.5"
+    "postinstall": "npm install --prefix server && npm install --prefix web",
+    "setup": "npm run db:setup --prefix server",
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm run dev --prefix server\" \"npm run dev --prefix web\"",
+    "build": "npm run build --prefix web",
+    "start": "npm start --prefix server",
+    "test": "npm test --prefix server",
+    "db:reset": "npm run db:reset --prefix server",
+    "make-admin": "npm run make-admin --prefix server --"
   },
   "devDependencies": {
-    "jest": "^30.5.1",
-    "supertest": "^7.2.2",
-    "tailwindcss": "^3.4.17"
+    "concurrently": "^10.0.6"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "license": "ISC"
 }
