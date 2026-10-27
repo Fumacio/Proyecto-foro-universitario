@@ -53,16 +53,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router'],
-          query: ['@tanstack/react-query'],
-          markdown: ['react-markdown', 'remark-gfm'],
-          radix: [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-tooltip',
-          ],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules\/(react|react-dom|scheduler|react-router|cookie|set-cookie-parser)\//.test(id)) return 'react';
+          if (id.includes('@tanstack')) return 'query';
+          if (id.includes('@radix-ui') || id.includes('@floating-ui')) return 'radix';
+          if (/node_modules\/(react-markdown|remark-|rehype-|micromark|mdast-|hast-|unist-|unified|vfile|property-information|space-separated-tokens|comma-separated-tokens|decode-named-character-reference|character-entities|markdown-table|ccount|devlop|bail|trough|zwitch|longest-streak|estree-util|html-url-attributes|style-to-|inline-style-parser|trim-lines|is-plain-obj|extend|escape-string-regexp)/.test(id))
+            return 'markdown';
+          return 'vendor';
         },
       },
     },

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:setup": "tsx scripts/ensure-env.ts && prisma db push && tsx prisma/seed.ts",
-    "db:reset": "tsx scripts/ensure-env.ts && prisma db push --force-reset && tsx prisma/seed.ts",
+    "db:reset": "tsx scripts/ensure-env.ts && prisma db push --accept-data-loss && tsx prisma/seed.ts --force",
     "db:seed": "tsx prisma/seed.ts",
     "make-admin": "tsx scripts/make-admin.ts",
     "postinstall": "prisma generate"

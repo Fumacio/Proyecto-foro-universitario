@@ -182,7 +182,7 @@ interface AdminUser extends UserSummary {
 | POST | `/auth/login` | `{ login /* email o username */, password }` | `{ user: Me }` + cookie |
 | POST | `/auth/logout` | — | `204` (borra cookie) |
 | GET | `/auth/me` | — | `{ user: Me \| null }` (**200 con null** si no hay sesión válida) |
-| POST | `/auth/forgot-password` | `{ email }` | `{ ok: true }` siempre (no revela si existe). En dev sin SMTP, loguea el link `/{FRONTEND_URL}/reset-password?token=...` en consola |
+| POST | `/auth/forgot-password` | `{ email }` | `{ ok: true }` siempre (no revela si existe). En dev sin SMTP, loguea el link `${FRONTEND_URL}/reset-password?token=...` en consola |
 | POST | `/auth/reset-password` | `{ token, password }` | `{ ok: true }` (sube tokenVersion) |
 | POST 🔒 | `/auth/change-password` | `{ currentPassword, newPassword }` | `{ ok: true }` + cookie nueva (otras sesiones caen) |
 

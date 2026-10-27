@@ -90,6 +90,7 @@ export function RoleBadge({ role, className, size = 'sm' }: { role: Role | undef
         'inline-flex shrink-0 items-center gap-1 rounded-md font-semibold ring-1 ring-inset',
         size === 'sm' ? 'h-[18px] px-1.5 text-[10.5px] [&_svg]:size-3' : 'h-6 px-2 text-xs [&_svg]:size-3.5',
         meta.className,
+        className,
       )}
     >
       <Icon strokeWidth={2.25} />
