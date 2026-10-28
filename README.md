@@ -21,8 +21,10 @@ Consultas de parcial · apuntes · encuestas · mensajes · todo en un solo luga
 <div align="center">
   <img src="docs/screenshots/home.png" alt="Inicio" width="900">
   <br><br>
-  <img src="docs/screenshots/post.png" alt="Un post con comentarios" width="440">
+  <img src="docs/screenshots/attachments.png" alt="Post con un PDF adjunto y reacciones" width="440">
   <img src="docs/screenshots/home-dark.png" alt="Modo oscuro" width="440">
+  <br><br>
+  <img src="docs/screenshots/post.png" alt="Un post con comentarios" width="440">
   <br><br>
   <img src="docs/screenshots/messages.png" alt="Mensajes directos" width="440">
   <img src="docs/screenshots/mod.png" alt="Panel de moderación" width="440">
@@ -105,6 +107,7 @@ si corre detrás de un proxy, `TRUST_PROXY=1`.
 | `SMTP_*` | Opcional. Mails de recuperación, bienvenida y avisos. Sin SMTP se imprimen en la consola |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Opcional. Activa "Continuar con Google" (ver abajo) |
 | `MAX_UPLOAD_MB` | Opcional. Tamaño máximo por archivo adjunto (default `25`) |
+| `UPLOAD_QUOTA_MB_PER_DAY` | Opcional. Cuánto puede subir cada usuario por día (default `200`) |
 | `TRUST_PROXY` | Opcional. `1` detrás de Render / Railway / Nginx |
 | `COOKIE_SECURE` | Opcional. En producción la sesión exige HTTPS; poné `false` si lo servís por HTTP (red local) |
 

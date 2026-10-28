@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { toast } from 'sonner';
+import { api, isApiError } from '@/lib/api';
 import { patchMe } from '@/lib/cache';
 import type { Preferences } from '@/lib/types';
 
@@ -22,20 +23,30 @@ export function usePreferences(initial?: Preferences) {
   });
 }
 
-/** Guardado instantáneo y optimista; si falla se revierte (el toast lo muestra el handler global). */
+/** Guardado instantáneo y optimista; si falla se revierte y avisa con un toast. */
 export function useUpdatePreferences() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: Partial<Preferences>) => api.patch<{ preferences: Preferences }>('/users/me/preferences', patch),
-    onMutate: async (patch) => {
-      await qc.cancelQueries({ queryKey: preferencesKey });
+    meta: { skipGlobalError: true },
+    onMutate: (patch) => {
+      // Sincrónico: el switch cambia en el mismo frame del click.
+      void qc.cancelQueries({ queryKey: preferencesKey });
       const prev = qc.getQueryData<{ preferences: Preferences }>(preferencesKey);
       const base = prev?.preferences ?? DEFAULT_PREFERENCES;
       qc.setQueryData(preferencesKey, { preferences: { ...base, ...patch } });
       return prev;
     },
-    onError: (_e, _patch, prev) => {
+    onError: (err, _patch, prev) => {
       if (prev) qc.setQueryData(preferencesKey, prev);
+      if (isApiError(err) && err.status === 401) {
+        qc.invalidateQueries({ queryKey: ['me'] });
+        return;
+      }
+      toast.error('No se pudo guardar la preferencia', {
+        id: 'pref-error',
+        description: isApiError(err) && err.code === 'NETWORK' ? err.message : 'Volvimos al valor anterior. Probá de nuevo.',
+      });
     },
     onSuccess: ({ preferences }) => {
       if (!preferences) return;

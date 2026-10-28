@@ -138,7 +138,7 @@ function UploadCard({ item, onRemove, onRetry, dense }: { item: UploadItem; onRe
 export function UploadList({ uploads, dense, className, columns = 2 }: { uploads: AttachmentUploads; dense?: boolean; className?: string; columns?: 1 | 2 }) {
   if (uploads.items.length === 0) return null;
   return (
-    <ul aria-label="Archivos adjuntos" className={cn('grid gap-2', columns === 2 && 'sm:grid-cols-2', className)}>
+    <ul aria-label="Archivos adjuntos" className={cn('grid grid-cols-1 gap-2', columns === 2 && 'sm:grid-cols-2', className)}>
       {uploads.items.map((it) => (
         <UploadCard key={it.key} item={it} dense={dense} onRemove={() => uploads.remove(it.key)} onRetry={() => uploads.retry(it.key)} />
       ))}

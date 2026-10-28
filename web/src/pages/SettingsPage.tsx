@@ -499,14 +499,7 @@ function NotificationsTab({ me }: { me: Me }) {
                     checked={prefs[r.key]}
                     aria-labelledby={`${id}-label`}
                     aria-describedby={`${id}-desc`}
-                    onCheckedChange={(checked) =>
-                      update.mutate(
-                        { [r.key]: checked },
-                        {
-                          onError: () => toast.error('No se pudo guardar la preferencia', { id: 'pref-error', description: 'Volvimos al valor anterior. Probá de nuevo.' }),
-                        },
-                      )
-                    }
+                    onCheckedChange={(checked) => update.mutate({ [r.key]: checked })}
                   />
                 ) : (
                   <Skeleton className="h-6 w-11 rounded-full" />
@@ -519,7 +512,7 @@ function NotificationsTab({ me }: { me: Me }) {
 
       <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
         <Bell className="mt-0.5 size-3.5 shrink-0" />
-        Los avisos de moderación y el mail de bienvenida se mandan siempre. Las notificaciones dentro del foro no cambian con estas opciones.
+        El mail de bienvenida se manda siempre; los avisos de moderación llegan solo dentro del foro. Las notificaciones dentro del foro no cambian con estas opciones.
       </p>
     </div>
   );

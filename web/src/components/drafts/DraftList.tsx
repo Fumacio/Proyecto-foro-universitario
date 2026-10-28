@@ -26,7 +26,9 @@ function excerpt(d: Draft) {
   return '';
 }
 
-function DraftRow({ d, current, onOpen }: { d: Draft; current?: boolean; onOpen: (d: Draft) => void }) {
+const sep = <span aria-hidden className="text-zinc-300 dark:text-zinc-700">·</span>;
+
+function DraftRow({ d, current, onOpen, compact }: { d: Draft; current?: boolean; onOpen: (d: Draft) => void; compact?: boolean }) {
   const communities = useCommunities();
   const community = d.communityId != null ? communities.data?.find((c) => c.id === d.communityId) : undefined;
   const del = useDeleteDraft();
@@ -56,18 +58,22 @@ function DraftRow({ d, current, onOpen }: { d: Draft; current?: boolean; onOpen:
           ) : (
             <span className="italic">Sin comunidad</span>
           )}
-          <span aria-hidden className="text-zinc-300 dark:text-zinc-700">·</span>
-          <span>{POST_TYPE_LABEL[d.type]}</span>
+          <span className="inline-flex items-center gap-2 whitespace-nowrap">
+            {sep}
+            {POST_TYPE_LABEL[d.type]}
+          </span>
           {files > 0 && (
-            <>
-              <span aria-hidden className="text-zinc-300 dark:text-zinc-700">·</span>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap" title={`${files} adjunto${files === 1 ? '' : 's'}`}>
+              {sep}
               <span className="inline-flex items-center gap-1">
                 <Paperclip className="size-3" /> {files}
               </span>
-            </>
+            </span>
           )}
-          <span aria-hidden className="text-zinc-300 dark:text-zinc-700">·</span>
-          <TimeAgo date={d.updatedAt} prefix="Editado " />
+          <span className="inline-flex basis-full items-center gap-2 whitespace-nowrap sm:basis-auto">
+            <span className="hidden sm:inline">{sep}</span>
+            <TimeAgo date={d.updatedAt} prefix="Editado " />
+          </span>
           {current && (
             <Badge tone="brand" className="ml-0.5">
               Editando ahora
@@ -76,7 +82,7 @@ function DraftRow({ d, current, onOpen }: { d: Draft; current?: boolean; onOpen:
         </div>
       </div>
       <div className="relative z-10 flex shrink-0 items-center gap-1 self-center">
-        {!current && (
+        {!current && !compact && (
           <Button size="sm" variant="secondary" onClick={() => onOpen(d)} className="hidden sm:inline-flex">
             <PenLine />
             Continuar
@@ -124,6 +130,7 @@ export function DraftList({
   currentId,
   onOpen,
   emptyAction,
+  compact,
 }: {
   drafts: Draft[] | undefined;
   loading?: boolean;
@@ -132,6 +139,8 @@ export function DraftList({
   currentId?: number | null;
   onOpen: (d: Draft) => void;
   emptyAction?: ReactNode;
+  /** Sin botón "Continuar" (la fila entera abre el borrador): para el diálogo. */
+  compact?: boolean;
 }) {
   if (loading) return <DraftListSkeleton />;
   if (error) return <ErrorState compact error={error} onRetry={onRetry} title="No pudimos cargar tus borradores" />;
@@ -149,7 +158,7 @@ export function DraftList({
   return (
     <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
       {drafts.map((d) => (
-        <DraftRow key={d.id} d={d} current={d.id === currentId} onOpen={onOpen} />
+        <DraftRow key={d.id} d={d} current={d.id === currentId} onOpen={onOpen} compact={compact} />
       ))}
     </ul>
   );

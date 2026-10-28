@@ -80,7 +80,7 @@ function FileRow({ a, variant, mine }: { a: Attachment; variant: Variant; mine?:
     return (
       <div
         className={cn(
-          'flex w-full max-w-[17rem] items-center gap-2.5 rounded-2xl p-2 pr-1.5 ring-1 ring-inset',
+          'flex w-full min-w-0 max-w-[17rem] items-center gap-2.5 rounded-2xl p-2 pr-1.5 ring-1 ring-inset',
           mine
             ? 'bg-brand-50 ring-brand-200/80 dark:bg-brand-500/15 dark:ring-brand-500/30'
             : 'bg-white ring-zinc-200 dark:bg-zinc-800/80 dark:ring-zinc-700/80',
@@ -111,7 +111,7 @@ function FileRow({ a, variant, mine }: { a: Attachment; variant: Variant; mine?:
   return (
     <li
       className={cn(
-        'group/file flex items-center gap-3 rounded-xl border border-zinc-200 bg-white transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700',
+        'group/file flex min-w-0 items-center gap-3 rounded-xl border border-zinc-200 bg-white transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700',
         compact ? 'p-2 pr-2' : 'p-2.5 pr-2.5',
       )}
     >
@@ -181,7 +181,7 @@ export function AttachmentList({
     <div className={cn('space-y-2.5', className)}>
       {images.length > 0 && <ImageGrid images={images} variant={variant} />}
       {files.length > 0 && (
-        <ul className={cn('grid gap-2', variant === 'compact' ? 'max-w-xl' : 'max-w-2xl')}>
+        <ul className={cn('grid grid-cols-1 gap-2', variant === 'compact' ? 'max-w-xl' : 'max-w-2xl')}>
           {files.map((a) => (
             <FileRow key={a.id} a={a} variant={variant} />
           ))}

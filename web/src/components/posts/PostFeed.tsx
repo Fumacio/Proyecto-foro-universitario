@@ -162,7 +162,7 @@ export function FilesToggle({ active, onChange, className }: { active: boolean; 
         aria-pressed={active}
         onClick={() => onChange(!active)}
         className={cn(
-          'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium shadow-xs transition-colors',
+          'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[13px] font-medium shadow-xs transition-colors sm:px-3',
           className,
           active
             ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-200 dark:hover:bg-brand-500/25'
@@ -170,7 +170,8 @@ export function FilesToggle({ active, onChange, className }: { active: boolean; 
         )}
       >
         <Paperclip className={cn('size-4', active ? 'text-brand-600 dark:text-brand-300' : 'text-zinc-400')} />
-        Con archivos
+        <span className="hidden sm:inline">Con archivos</span>
+        <span className="sm:hidden">Archivos</span>
         {active && <X className="-mr-0.5 size-3.5 opacity-70" />}
       </button>
     </Tooltip>

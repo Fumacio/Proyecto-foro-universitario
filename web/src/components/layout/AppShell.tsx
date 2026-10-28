@@ -95,7 +95,8 @@ export function PageHeader({
   return (
     <div className={cn('mb-4 flex flex-wrap items-center gap-x-4 gap-y-3', className)}>
       {icon}
-      <div className="min-w-0 flex-1">
+      {/* basis-56: en pantallas angostas las acciones bajan de renglón en vez de pisar el título */}
+      <div className="min-w-0 flex-1 basis-56">
         <h1 className="text-xl font-bold tracking-tight text-zinc-950 sm:text-2xl dark:text-white">{title}</h1>
         {description && <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>}
       </div>

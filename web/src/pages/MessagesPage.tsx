@@ -279,8 +279,16 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
     ta.style.height = `${Math.min(ta.scrollHeight, 140)}px`;
   }, [text]);
 
+  /** ¿El usuario está mirando el final? (para seguir abajo mientras cargan las imágenes) */
+  const atBottom = useRef(true);
+  const onMediaLoad = () => {
+    const el = scrollRef.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  };
+
   const onScroll = () => {
     const el = scrollRef.current;
+    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     if (!el || !q.hasNextPage || q.isFetchingNextPage) return;
     if (el.scrollTop < 80) {
       prevHeight.current = el.scrollHeight;
@@ -325,7 +333,7 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
         </Link>
       </div>
 
-      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+      <div ref={scrollRef} onScroll={onScroll} onLoadCapture={onMediaLoad} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
         {q.isFetchingNextPage && (
           <div className="flex justify-center py-2">
             <Spinner className="size-4 text-zinc-400" />

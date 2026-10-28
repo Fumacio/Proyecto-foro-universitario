@@ -34,6 +34,10 @@ function writeReactions(qc: QueryClient, target: ReactionTarget, reactions: Reac
 
 const basePath = (t: ReactionTarget) => (t.type === 'post' ? `/posts/${t.id}` : `/comments/${t.id}`);
 
+/** Toggles en vuelo por contenido: solo la última respuesta pisa el estado optimista (sin parpadeos). */
+const pending = new Map<string, number>();
+const targetKey = (t: ReactionTarget) => `${t.type}:${t.id}`;
+
 /** Toggle optimista: se refleja en el feed, el detalle, la búsqueda y el árbol de comentarios. */
 export function useToggleReaction() {
   const qc = useQueryClient();
@@ -41,16 +45,25 @@ export function useToggleReaction() {
     mutationFn: ({ target, emoji }: { target: ReactionTarget; emoji: ReactionEmoji }) =>
       api.post<{ reactions: ReactionSummary[] }>(`${basePath(target)}/reactions`, { emoji }),
     onMutate: ({ target, emoji }) => {
+      pending.set(targetKey(target), (pending.get(targetKey(target)) ?? 0) + 1);
       const prev = readReactions(qc, target);
       if (prev) writeReactions(qc, target, toggleReactionList(prev, emoji));
       return prev;
     },
-    onError: (_e, { target }, prev) => {
-      if (prev) writeReactions(qc, target, prev);
+    onError: (_e, { target, emoji }) => {
+      // Deshacer solo este toggle (otros pueden seguir en vuelo).
+      const current = readReactions(qc, target);
+      if (current) writeReactions(qc, target, toggleReactionList(current, emoji));
     },
     onSuccess: ({ reactions }, { target }) => {
-      if (Array.isArray(reactions)) writeReactions(qc, target, reactions);
+      if (Array.isArray(reactions) && (pending.get(targetKey(target)) ?? 0) <= 1) writeReactions(qc, target, reactions);
       qc.invalidateQueries({ queryKey: ['reaction-users', target.type, target.id] });
+    },
+    onSettled: (_d, _e, { target }) => {
+      const k = targetKey(target);
+      const n = (pending.get(k) ?? 1) - 1;
+      if (n <= 0) pending.delete(k);
+      else pending.set(k, n);
     },
   });
 }

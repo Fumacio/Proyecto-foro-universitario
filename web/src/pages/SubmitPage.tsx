@@ -269,6 +269,7 @@ function DraftsDialog({ open, onOpenChange, currentId, onOpenDraft }: { open: bo
         error={q.isError ? q.error : null}
         onRetry={() => void q.refetch()}
         currentId={currentId}
+        compact
         onOpen={(d) => {
           onOpenChange(false);
           if (d.id !== currentId) onOpenDraft(d.id);
@@ -607,7 +608,8 @@ function SubmitEditor({
       ...(imageUrl ? { imageUrl } : {}),
       ...(tagIds.length ? { tagIds } : {}),
       ...(type === 'POLL' ? { poll: { options: options.map((o) => o.trim()).filter(Boolean), closesInDays } } : {}),
-      ...(uploads.ids.length ? { attachmentIds: uploads.ids } : {}),
+      // Con borrador mandamos la lista siempre: sin `attachmentIds` el server pasaría los del borrador.
+      ...(uploads.ids.length || draftIdRef.current ? { attachmentIds: uploads.ids } : {}),
       ...(draftIdRef.current ? { draftId: draftIdRef.current } : {}),
     };
     create.mutate(input, {
@@ -619,6 +621,13 @@ function SubmitEditor({
       },
       onError: (err) => {
         publishing.current = false;
+        // El borrador ya no existe (lo borraron en otra pestaña): publicamos sin él.
+        if (isApiError(err) && err.details?.draftId && input.draftId) {
+          draftIdRef.current = null;
+          setDraftId(null);
+          void submit();
+          return;
+        }
         if (isApiError(err) && err.details) {
           const mapped: Record<string, string> = {};
           for (const [k, v] of Object.entries(err.details))
@@ -677,7 +686,7 @@ function SubmitEditor({
     >
       <div className="mb-5 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">{draftId ? 'Continuar borrador' : 'Crear post'}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">{init.draftId && !init.restoredLocal ? 'Continuar borrador' : 'Crear post'}</h1>
           <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{typeMeta.hint}</p>
         </div>
         <Button variant="secondary" size="sm" onClick={() => setDraftsOpen(true)} className="shrink-0">
@@ -1011,14 +1020,19 @@ export default function SubmitPage() {
   const paramId = parseDraftParam(params.get('draft'));
   // `key` cambia solo cuando el usuario abre otro borrador (no cuando el autoguardado crea uno).
   const [session, setSession] = useState({ key: 0, draftId: paramId });
+  /** Borrador abierto en el editor (el inicial o el que creó el autoguardado). */
+  const activeId = useRef<number | null>(paramId);
 
+  // Cambio de ?draft= que no vino del autoguardado (atrás/adelante, link, diálogo) → otro borrador.
   useEffect(() => {
-    if (paramId !== session.draftId) setSession((s) => ({ key: s.key + 1, draftId: paramId }));
-  }, [paramId, session.draftId]);
+    if (paramId === activeId.current) return;
+    activeId.current = paramId;
+    setSession((s) => ({ key: s.key + 1, draftId: paramId }));
+  }, [paramId]);
 
   const onDraftCreated = useCallback(
     (id: number) => {
-      setSession((s) => ({ ...s, draftId: id }));
+      activeId.current = id;
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -1035,6 +1049,12 @@ export default function SubmitPage() {
   const onOpenDraft = useCallback(
     (id: number | null) => {
       if (id == null) clearLocalDraft();
+      window.scrollTo({ top: 0 });
+      if (id === activeId.current) {
+        // Mismo id en la URL (p. ej. "empezar uno nuevo" sin haber guardado nada): remontar igual.
+        setSession((s) => ({ key: s.key + 1, draftId: id }));
+        return;
+      }
       setParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -1045,7 +1065,6 @@ export default function SubmitPage() {
         },
         { replace: false },
       );
-      window.scrollTo({ top: 0 });
     },
     [setParams],
   );
