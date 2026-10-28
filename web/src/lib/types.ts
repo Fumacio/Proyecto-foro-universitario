@@ -32,6 +32,11 @@ export interface Me extends UserSummary {
   unreadNotifications: number;
   unreadMessages: number;
   ban: Ban | null; // ban activo, o null
+  /* v2.1 — opcionales por compatibilidad con un server anterior */
+  hasPassword?: boolean; // false si la cuenta se creó con Google y nunca puso contraseña
+  googleLinked?: boolean;
+  preferences?: Preferences;
+  draftCount?: number;
 }
 
 export interface UserProfile extends UserSummary {
@@ -108,12 +113,17 @@ export interface PostListItem {
   poll: Poll | null; // solo POLL
   createdAt: string;
   editedAt: string | null;
+  /* v2.1 */
+  reactions?: ReactionSummary[];
+  attachmentCount?: number;
 }
 
 export interface PostDetail extends PostListItem {
   body: string; // markdown crudo
   canEdit: boolean; // autor
   canModerate: boolean; // mod/admin
+  /* v2.1 */
+  attachments?: Attachment[];
 }
 
 export interface Comment {
@@ -129,6 +139,9 @@ export interface Comment {
   createdAt: string;
   editedAt: string | null;
   replies: Comment[]; // árbol completo
+  /* v2.1 */
+  reactions?: ReactionSummary[];
+  attachments?: Attachment[]; // [] si isDeleted
 }
 
 export interface CommentWithPost extends Omit<Comment, 'replies'> {
@@ -141,7 +154,8 @@ export type NotificationType =
   | 'MENTION'
   | 'FOLLOW'
   | 'ANSWER_ACCEPTED'
-  | 'MOD';
+  | 'MOD'
+  | 'REACTION'; // v2.1: `message` = el emoji
 
 export interface Notification {
   id: number;
@@ -166,8 +180,9 @@ export interface Message {
   id: number;
   conversationId: number;
   sender: UserSummary;
-  body: string;
+  body: string; // puede ser "" si hay adjuntos (v2.1)
   createdAt: string;
+  attachments?: Attachment[]; // v2.1
 }
 
 export type ReportReason = 'SPAM' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OFF_TOPIC' | 'OTHER';
@@ -192,6 +207,74 @@ export interface AdminUser extends UserSummary {
   postCount: number;
   commentCount: number;
   ban: Ban | null;
+}
+
+/* ---------- v2.1: reacciones ---------- */
+
+/** Conjunto fijo (el server rechaza cualquier otro con 400). */
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🤔', '🔥'] as const;
+export type ReactionEmoji = (typeof REACTIONS)[number];
+
+/** Solo vienen los emojis con count > 0, en el orden de REACTIONS. */
+export interface ReactionSummary {
+  emoji: ReactionEmoji;
+  count: number;
+  reacted: boolean; // el usuario actual reaccionó con este
+}
+
+/* ---------- v2.1: adjuntos ---------- */
+
+export type AttachmentKind = 'IMAGE' | 'PDF' | 'DOCUMENT' | 'SPREADSHEET' | 'PRESENTATION' | 'ARCHIVE' | 'TEXT' | 'OTHER';
+
+export interface Attachment {
+  id: number;
+  filename: string; // nombre original saneado, p. ej. "Resumen Parcial 1.pdf"
+  mimeType: string;
+  size: number; // bytes
+  kind: AttachmentKind;
+  url: string; // descarga: "/api/attachments/:id/download"
+  previewUrl: string | null; // vista en el navegador (solo IMAGE y PDF): "/api/attachments/:id/view"
+  downloadCount: number;
+  createdAt: string;
+}
+
+/* ---------- v2.1: preferencias de avisos por mail ---------- */
+
+export interface Preferences {
+  emailReplies: boolean; // POST_REPLY, COMMENT_REPLY, ANSWER_ACCEPTED (default true)
+  emailMentions: boolean; // MENTION (default true)
+  emailMessages: boolean; // mensajes directos (default true)
+  emailFollows: boolean; // FOLLOW (default false)
+  emailReactions: boolean; // REACTION (default false)
+}
+
+/* ---------- v2.1: borradores ---------- */
+
+export interface Draft {
+  id: number;
+  communityId: number | null;
+  type: PostType;
+  title: string; // puede ser ""
+  body: string;
+  url: string | null;
+  imageUrl: string | null;
+  tagIds: number[];
+  poll: { options: string[]; closesInDays: number | null } | null;
+  attachments: Attachment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DraftInput {
+  communityId?: number | null;
+  type?: PostType;
+  title?: string;
+  body?: string;
+  url?: string | null;
+  imageUrl?: string | null;
+  tagIds?: number[];
+  poll?: { options: string[]; closesInDays: number | null } | null;
+  attachmentIds?: number[];
 }
 
 /* ---------- Extras derivados de las respuestas de los endpoints ---------- */
@@ -226,6 +309,8 @@ export interface CreatePostInput {
   imageUrl?: string | null;
   tagIds?: number[];
   poll?: { options: string[]; closesInDays?: number | null };
+  attachmentIds?: number[]; // v2.1, máx 10
+  draftId?: number; // v2.1: al publicar, el borrador se borra
 }
 
 export interface UpdatePostInput {
@@ -233,6 +318,7 @@ export interface UpdatePostInput {
   body?: string;
   tagIds?: number[];
   imageUrl?: string | null;
+  attachmentIds?: number[]; // v2.1: reemplaza la lista
 }
 
 export interface CommunityInput {

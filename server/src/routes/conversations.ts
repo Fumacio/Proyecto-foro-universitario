@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
+import { attachmentIdsSchema, linkAttachments, MAX_ATTACHMENTS } from '../lib/attachments.js';
+import { queueMessageEmail } from '../lib/emailNotify.js';
 import { HttpError, notFound } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 import { iso, messageInclude, toMessage, toUserSummary, userSummarySelect } from '../lib/serializers.js';
@@ -20,7 +22,11 @@ const NOT_FOUND = 'Esa conversación no existe';
 function conversationInclude(meId: number) {
   return {
     participants: { where: { userId: { not: meId } }, include: { user: { select: userSummarySelect } } },
-    messages: { orderBy: { id: 'desc' }, take: 1 },
+    messages: {
+      orderBy: { id: 'desc' },
+      take: 1,
+      include: { attachments: { orderBy: { id: 'asc' }, take: 1, select: { filename: true } }, _count: { select: { attachments: true } } },
+    },
   } satisfies Prisma.ConversationInclude;
 }
 
@@ -33,10 +39,19 @@ function toConversation(c: ConversationRow, unread: number): ConversationDto | n
   return {
     id: c.id,
     other: toUserSummary(other),
-    lastMessage: last ? { body: last.body, createdAt: iso(last.createdAt), senderId: last.senderId } : null,
+    lastMessage: last ? { body: previewBody(last), createdAt: iso(last.createdAt), senderId: last.senderId } : null,
     unread,
     updatedAt: iso(c.updatedAt),
   };
+}
+
+/** Mensaje solo con adjuntos: la vista previa muestra el archivo. */
+function previewBody(m: ConversationRow['messages'][number]): string {
+  if (m.body) return m.body;
+  const first = m.attachments[0];
+  if (!first) return '';
+  const more = m._count.attachments - 1;
+  return `📎 ${first.filename}${more > 0 ? ` (+${more})` : ''}`;
 }
 
 async function participantOr404(conversationId: number, userId: number) {
@@ -117,31 +132,45 @@ router.post('/:id/messages', requireWriter, messageLimiter, async (req, res) => 
   const me = authUser(req);
   const id = parseId(req.params.id, NOT_FOUND);
   await participantOr404(id, me.id);
-  const { body } = parse(
-    z.object({
-      body: z
-        .string({ error: 'Escribí un mensaje' })
-        .trim()
-        .min(1, 'El mensaje no puede estar vacío')
-        .max(4000, 'El mensaje puede tener como máximo 4000 caracteres'),
-    }),
+  const { body, attachmentIds } = parse(
+    z
+      .object({
+        body: z
+          .string({ error: 'Escribí un mensaje' })
+          .trim()
+          .max(4000, 'El mensaje puede tener como máximo 4000 caracteres')
+          .optional()
+          .default(''),
+        attachmentIds: attachmentIdsSchema(MAX_ATTACHMENTS.message).optional().default([]),
+      })
+      .refine((d) => d.body.length > 0 || d.attachmentIds.length > 0, { path: ['body'], message: 'El mensaje no puede estar vacío' }),
     req.body,
   );
 
   const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.message.create({ data: { conversationId: id, senderId: me.id, body }, include: messageInclude });
+    const created = await tx.message.create({ data: { conversationId: id, senderId: me.id, body }, select: { id: true, createdAt: true } });
+    if (attachmentIds.length > 0) await linkAttachments(tx, { ids: attachmentIds, userId: me.id, target: { messageId: created.id } });
     await tx.conversation.update({ where: { id }, data: { updatedAt: created.createdAt } });
     await tx.conversationParticipant.update({
       where: { conversationId_userId: { conversationId: id, userId: me.id } },
       data: { lastReadAt: created.createdAt },
     });
-    return created;
+    return tx.message.findUniqueOrThrow({ where: { id: created.id }, include: messageInclude });
   });
 
   const dto = toMessage(message);
   const participants = await prisma.conversationParticipant.findMany({ where: { conversationId: id }, select: { userId: true } });
   for (const p of participants) {
     sendEvent(p.userId, 'message', dto);
+    if (p.userId !== me.id) {
+      queueMessageEmail({
+        recipientId: p.userId,
+        conversationId: id,
+        sender: { username: me.username, displayName: me.displayName },
+        body,
+        attachmentNames: dto.attachments.map((a) => a.filename),
+      });
+    }
     await emitUnread(p.userId);
   }
   res.status(201).json({ message: dto });

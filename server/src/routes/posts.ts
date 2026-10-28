@@ -1,8 +1,18 @@
 import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
+import {
+  attachmentIdsSchema,
+  deleteAttachmentsWhere,
+  linkAttachments,
+  MAX_ATTACHMENTS,
+  postAttachmentsWhere,
+  removeStoredFiles,
+  storedNamesWhere,
+} from '../lib/attachments.js';
 import { forbidden, HttpError, notFound } from '../lib/errors.js';
 import { notify, notifyMentions } from '../lib/notify.js';
+import { assertTagsExist, bodySchema, imageUrlSchema, POST_TYPES, tagIdsSchema } from '../lib/postSchemas.js';
 import {
   getPostRowOrThrow,
   isHttpUrl,
@@ -10,18 +20,18 @@ import {
   periodStart,
   postOrderBy,
   refreshPostScore,
+  serializePostDetail,
 } from '../lib/posts.js';
 import { prisma } from '../lib/prisma.js';
-import { postInclude, toPoll, toPostDetail } from '../lib/serializers.js';
+import { normalizeEmoji, postReactionSummaries } from '../lib/reactions.js';
+import { toPoll, toUserSummary, userSummarySelect } from '../lib/serializers.js';
 import { hotScore } from '../lib/text.js';
-import { isUploadUrl } from '../lib/upload.js';
 import { boolQuery, idSchema, limitSchema, pageSchema, parse, parseId } from '../lib/validate.js';
 import { authUser, isMod, requireAuth, requireMod, requireWriter } from '../middleware/auth.js';
 import { actionLimiter, postLimiter, voteLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
-
-const POST_TYPES = ['TEXT', 'QUESTION', 'POLL', 'LINK'] as const;
+const POST_NOT_FOUND = 'El post no existe o fue eliminado';
 
 const optionalText = (max: number) =>
   z
@@ -44,6 +54,7 @@ const listQuerySchema = z.object({
     .transform((v) => (v ? v.toUpperCase() : undefined))
     .pipe(z.enum(POST_TYPES).optional()),
   unanswered: boolQuery,
+  hasAttachments: boolQuery,
   q: optionalText(200),
   page: pageSchema,
   limit: limitSchema(),
@@ -60,6 +71,7 @@ router.get('/', async (req, res) => {
   if (query.author) and.push({ author: { usernameKey: query.author.toLowerCase() } });
   if (query.type) and.push({ type: query.type });
   if (query.unanswered) and.push({ type: 'QUESTION', acceptedCommentId: null });
+  if (query.hasAttachments) and.push({ attachments: { some: {} } });
   if (query.q) and.push({ OR: [{ title: { contains: query.q } }, { body: { contains: query.q } }] });
   if (query.feed === 'following') {
     const user = authUser(req);
@@ -89,24 +101,11 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
-const imageUrlSchema = z
-  .union([z.string().trim(), z.null()])
-  .optional()
-  .transform((v) => (v === '' ? null : v))
-  .refine((v) => v === undefined || v === null || isUploadUrl(v), 'La imagen tiene que subirse desde el foro (/uploads/...)');
-
-const tagIdsSchema = z
-  .array(idSchema, { error: 'Las etiquetas tienen que ser una lista' })
-  .max(5, 'Podés elegir hasta 5 etiquetas')
-  .transform((ids) => [...new Set(ids)]);
-
 const titleSchema = z
   .string({ error: 'Escribí un título' })
   .trim()
   .min(3, 'El título tiene que tener entre 3 y 200 caracteres')
   .max(200, 'El título tiene que tener entre 3 y 200 caracteres');
-
-const bodySchema = z.string().max(40_000, 'El texto puede tener como máximo 40.000 caracteres');
 
 const createSchema = z
   .object({
@@ -139,6 +138,8 @@ const createSchema = z
       })
       .nullable()
       .optional(),
+    attachmentIds: attachmentIdsSchema(MAX_ATTACHMENTS.post).optional(),
+    draftId: idSchema.optional(),
   })
   .superRefine((d, ctx) => {
     if ((d.type === 'TEXT' || d.type === 'QUESTION') && d.body.trim() === '') {
@@ -161,12 +162,6 @@ const createSchema = z
     }
   });
 
-async function assertTagsExist(tagIds: number[]): Promise<void> {
-  if (tagIds.length === 0) return;
-  const count = await prisma.tag.count({ where: { id: { in: tagIds } } });
-  if (count !== tagIds.length) throw new HttpError(400, 'VALIDATION', 'Alguna etiqueta no existe', { tagIds: 'Alguna etiqueta no existe' });
-}
-
 // POST /posts
 router.post('/', requireWriter, postLimiter, async (req, res) => {
   const user = authUser(req);
@@ -174,29 +169,59 @@ router.post('/', requireWriter, postLimiter, async (req, res) => {
   const community = await prisma.community.findUnique({ where: { id: data.communityId }, select: { id: true } });
   if (!community) throw new HttpError(400, 'VALIDATION', 'La comunidad no existe', { communityId: 'La comunidad no existe' });
   await assertTagsExist(data.tagIds);
+  if (data.draftId !== undefined) {
+    const draft = await prisma.draft.findUnique({ where: { id: data.draftId }, select: { userId: true } });
+    if (!draft || draft.userId !== user.id) {
+      throw new HttpError(400, 'VALIDATION', 'El borrador no existe', { draftId: 'El borrador no existe' });
+    }
+  }
 
   const createdAt = new Date();
   const poll = data.type === 'POLL' ? data.poll : null;
-  const post = await prisma.post.create({
-    data: {
-      type: data.type,
-      title: data.title,
-      body: data.body.trim(),
-      url: data.type === 'LINK' ? (data.url ?? null) : null,
-      imageUrl: data.imageUrl ?? null,
-      authorId: user.id,
-      communityId: community.id,
-      createdAt,
-      hot: hotScore(0, createdAt),
-      pollClosesAt: poll?.closesInDays ? new Date(createdAt.getTime() + poll.closesInDays * 86_400_000) : null,
-      tags: { create: data.tagIds.map((tagId) => ({ tagId })) },
-      ...(poll ? { pollOptions: { create: poll.options.map((text, position) => ({ text, position })) } } : {}),
-    },
-    include: postInclude(user.id),
+  const draftId = data.draftId;
+  const toRemove: string[] = [];
+  const created = await prisma.$transaction(async (tx) => {
+    const row = await tx.post.create({
+      data: {
+        type: data.type,
+        title: data.title,
+        body: data.body.trim(),
+        url: data.type === 'LINK' ? (data.url ?? null) : null,
+        imageUrl: data.imageUrl ?? null,
+        authorId: user.id,
+        communityId: community.id,
+        createdAt,
+        hot: hotScore(0, createdAt),
+        pollClosesAt: poll?.closesInDays ? new Date(createdAt.getTime() + poll.closesInDays * 86_400_000) : null,
+        tags: { create: data.tagIds.map((tagId) => ({ tagId })) },
+        ...(poll ? { pollOptions: { create: poll.options.map((text, position) => ({ text, position })) } } : {}),
+      },
+      select: { id: true, title: true, body: true },
+    });
+    // Sin attachmentIds explícitos, los adjuntos del borrador pasan al post.
+    const ids =
+      data.attachmentIds ??
+      (draftId !== undefined ? (await tx.attachment.findMany({ where: { draftId }, select: { id: true } })).map((a) => a.id) : []);
+    if (ids.length > MAX_ATTACHMENTS.post) {
+      throw new HttpError(400, 'VALIDATION', `Podés adjuntar hasta ${MAX_ATTACHMENTS.post} archivos`, { attachmentIds: 'Demasiados adjuntos' });
+    }
+    await linkAttachments(tx, {
+      ids,
+      userId: user.id,
+      target: { postId: row.id },
+      ...(draftId !== undefined ? { alsoAllow: { draftId } } : {}),
+    });
+    if (draftId !== undefined) {
+      toRemove.push(...(await deleteAttachmentsWhere(tx, { draftId })));
+      await tx.draft.delete({ where: { id: draftId } });
+    }
+    return row;
   });
+  await removeStoredFiles(toRemove);
 
-  await notifyMentions({ text: `${post.title}\n${post.body}`, actorId: user.id, postId: post.id });
-  res.status(201).json({ post: toPostDetail(post, user) });
+  await notifyMentions({ text: `${created.title}\n${created.body}`, actorId: user.id, postId: created.id });
+  const post = await getPostRowOrThrow(created.id, user.id);
+  res.status(201).json({ post: await serializePostDetail(post, user) });
 });
 
 // GET /posts/:id  (suma una vista)
@@ -206,7 +231,7 @@ router.get('/:id', async (req, res) => {
   const updated = await prisma.post.updateMany({ where: { id }, data: { viewCount: { increment: 1 } } });
   if (updated.count === 0) throw notFound('El post no existe o fue eliminado');
   const post = await getPostRowOrThrow(id, viewer?.id ?? null);
-  res.json({ post: toPostDetail(post, viewer) });
+  res.json({ post: await serializePostDetail(post, viewer) });
 });
 
 const updateSchema = z.object({
@@ -214,6 +239,7 @@ const updateSchema = z.object({
   body: bodySchema.optional(),
   tagIds: tagIdsSchema.optional(),
   imageUrl: imageUrlSchema,
+  attachmentIds: attachmentIdsSchema(MAX_ATTACHMENTS.post).optional(),
 });
 
 // PATCH /posts/:id  (autor o mod)
@@ -229,18 +255,29 @@ router.patch('/:id', requireWriter, async (req, res) => {
   }
   if (data.tagIds) await assertTagsExist(data.tagIds);
 
-  const changed = data.title !== undefined || data.body !== undefined || data.tagIds !== undefined || data.imageUrl !== undefined;
-  const post = await prisma.post.update({
-    where: { id },
-    data: {
-      ...(data.title !== undefined ? { title: data.title } : {}),
-      ...(data.body !== undefined ? { body: data.body.trim() } : {}),
-      ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl } : {}),
-      ...(data.tagIds ? { tags: { deleteMany: {}, create: data.tagIds.map((tagId) => ({ tagId })) } } : {}),
-      ...(changed ? { editedAt: new Date() } : {}),
-    },
-    include: postInclude(user.id),
+  const changed =
+    data.title !== undefined ||
+    data.body !== undefined ||
+    data.tagIds !== undefined ||
+    data.imageUrl !== undefined ||
+    data.attachmentIds !== undefined;
+  const attachmentIds = data.attachmentIds;
+  const removed = await prisma.$transaction(async (tx) => {
+    await tx.post.update({
+      where: { id },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.body !== undefined ? { body: data.body.trim() } : {}),
+        ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl } : {}),
+        ...(data.tagIds ? { tags: { deleteMany: {}, create: data.tagIds.map((tagId) => ({ tagId })) } } : {}),
+        ...(changed ? { editedAt: new Date() } : {}),
+      },
+    });
+    if (attachmentIds === undefined) return [];
+    return linkAttachments(tx, { ids: attachmentIds, userId: user.id, target: { postId: id }, replace: true });
   });
+  await removeStoredFiles(removed);
+  const post = await getPostRowOrThrow(id, user.id);
 
   if (data.body !== undefined || data.title !== undefined) {
     await notifyMentions({
@@ -250,7 +287,7 @@ router.patch('/:id', requireWriter, async (req, res) => {
       postId: post.id,
     });
   }
-  res.json({ post: toPostDetail(post, user) });
+  res.json({ post: await serializePostDetail(post, user) });
 });
 
 // DELETE /posts/:id  (autor o mod; un usuario baneado puede borrar lo suyo)
@@ -262,6 +299,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
   const isAuthor = post.authorId === user.id;
   if (!isAuthor && !isMod(user)) throw forbidden('Solo el autor o un moderador pueden borrar este post');
 
+  const files = await storedNamesWhere(postAttachmentsWhere(id));
   await prisma.$transaction([
     // Los reportes pendientes sobre este contenido quedan resueltos.
     prisma.report.updateMany({
@@ -270,6 +308,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     }),
     prisma.post.delete({ where: { id } }),
   ]);
+  await removeStoredFiles(files);
 
   if (!isAuthor && post.authorId) {
     await notify({
@@ -397,6 +436,86 @@ router.post('/:id/poll/vote', requireWriter, voteLimiter, async (req, res) => {
   });
   const row = await getPostRowOrThrow(id, user.id);
   res.json({ poll: toPoll(row) });
+});
+
+// ---------- reacciones ----------
+
+const reactionSchema = z.object({
+  emoji: z.unknown().transform((v, ctx) => {
+    const emoji = normalizeEmoji(v);
+    if (!emoji) {
+      ctx.addIssue({ code: 'custom', message: 'Esa reacción no está permitida' });
+      return z.NEVER;
+    }
+    return emoji;
+  }),
+});
+
+const optionalEmojiQuery = z.object({
+  emoji: z
+    .unknown()
+    .optional()
+    .transform((v, ctx) => {
+      if (v === undefined || v === '') return undefined;
+      const emoji = normalizeEmoji(v);
+      if (!emoji) {
+        ctx.addIssue({ code: 'custom', message: 'Esa reacción no está permitida' });
+        return z.NEVER;
+      }
+      return emoji;
+    }),
+});
+
+// POST /posts/:id/reactions  (toggle)
+router.post('/:id/reactions', requireWriter, voteLimiter, async (req, res) => {
+  const user = authUser(req);
+  const id = parseId(req.params.id, POST_NOT_FOUND);
+  const { emoji } = parse(reactionSchema, req.body);
+  const post = await prisma.post.findUnique({ where: { id }, select: { id: true, authorId: true } });
+  if (!post) throw notFound(POST_NOT_FOUND);
+
+  const where = { userId: user.id, postId: id, emoji };
+  const removed = await prisma.postReaction.deleteMany({ where });
+  let added = false;
+  if (removed.count === 0) {
+    added = await prisma.postReaction
+      .create({ data: where })
+      .then(() => true)
+      .catch((err: unknown) => {
+        if ((err as { code?: string }).code === 'P2002') return false; // doble click simultáneo
+        throw err;
+      });
+  }
+  if (added && post.authorId && post.authorId !== user.id) {
+    // Solo la primera reacción de esta persona a este post genera notificación.
+    const already = await prisma.notification.findFirst({
+      where: { userId: post.authorId, actorId: user.id, type: 'REACTION', postId: id, commentId: null },
+      select: { id: true },
+    });
+    if (!already) await notify({ userId: post.authorId, type: 'REACTION', actorId: user.id, postId: id, message: emoji });
+  }
+  const reactions = (await postReactionSummaries([id], user.id)).get(id) ?? [];
+  res.json({ reactions });
+});
+
+// GET /posts/:id/reactions/users?emoji=
+router.get('/:id/reactions/users', async (req, res) => {
+  const id = parseId(req.params.id, POST_NOT_FOUND);
+  const { emoji } = parse(optionalEmojiQuery, req.query);
+  const post = await prisma.post.findUnique({ where: { id }, select: { id: true } });
+  if (!post) throw notFound(POST_NOT_FOUND);
+  const rows = await prisma.postReaction.findMany({
+    where: { postId: id, ...(emoji ? { emoji } : {}) },
+    orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
+    take: 200,
+    select: { user: { select: userSummarySelect } },
+  });
+  const seen = new Set<number>();
+  const items = rows
+    .filter((r) => !seen.has(r.user.id) && seen.add(r.user.id))
+    .slice(0, 50)
+    .map((r) => toUserSummary(r.user));
+  res.json({ items });
 });
 
 export default router;

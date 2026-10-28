@@ -7,6 +7,7 @@ import { cn, formatCount, isMac } from '@/lib/utils';
 import { useMe } from '@/queries/auth';
 import { useCommunities, useJoinedCommunities } from '@/queries/communities';
 import { CommunityIcon, Logo } from '../common';
+import { InstallAppCard } from '../pwa/InstallApp';
 import { Kbd, Skeleton } from '../ui/misc';
 import { ThemeSwitcher } from './UserMenu';
 
@@ -139,6 +140,7 @@ export function MobileDrawer() {
               </Link>
             )}
             <SidebarContent onNavigate={() => drawerStore.set(false)} />
+            <InstallAppCard className="mt-4" />
             <div className="mt-4">
               <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Tema</p>
               <ThemeSwitcher />

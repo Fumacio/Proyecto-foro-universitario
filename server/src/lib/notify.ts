@@ -1,4 +1,5 @@
 import type { NotificationType } from '@prisma/client';
+import { queueNotificationEmail } from './emailNotify.js';
 import { prisma } from './prisma.js';
 import { notificationInclude, toNotification } from './serializers.js';
 import { sendEvent } from './sse.js';
@@ -15,7 +16,8 @@ export interface NotifyInput {
 }
 
 /**
- * Crea la notificación y la empuja por SSE. Nunca notifica a uno mismo.
+ * Crea la notificación y la empuja por SSE (o, si el destinatario no está conectado y lo tiene
+ * activado, encola un mail). Nunca notifica a uno mismo.
  * Es "best effort": un error acá no tira abajo la request que la originó.
  */
 export async function notify(input: NotifyInput): Promise<void> {
@@ -33,6 +35,7 @@ export async function notify(input: NotifyInput): Promise<void> {
       include: notificationInclude,
     });
     sendEvent(input.userId, 'notification', toNotification(n));
+    queueNotificationEmail(n);
     await emitUnread(input.userId);
   } catch (err) {
     console.error('[notify] no se pudo crear la notificación', err);

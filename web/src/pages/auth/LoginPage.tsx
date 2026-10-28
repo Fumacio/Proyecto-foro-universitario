@@ -9,7 +9,7 @@ import { errorMessage, isApiError } from '@/lib/api';
 import { displayName, safeNext } from '@/lib/utils';
 import { useLogin, useMe } from '@/queries/auth';
 import { AuthHeader } from './AuthLayout';
-import { FormAlert, PasswordInput } from './authBits';
+import { FormAlert, OAuthProviders, PasswordInput } from './authBits';
 
 export function LoginPage() {
   useDocumentTitle('Iniciar sesión');
@@ -21,6 +21,7 @@ export function LoginPage() {
   const [form, setForm] = useState({ login: '', password: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const googleError = params.get('error') === 'google';
 
   if (me && !login.isPending && !login.isSuccess) return <Navigate to={next} replace />;
 
@@ -41,7 +42,8 @@ export function LoginPage() {
         },
         onError: (err) => {
           if (isApiError(err) && err.details) setErrors(err.details);
-          if (isApiError(err) && err.status === 401) setFormError('Usuario o contraseña incorrectos.');
+          if (isApiError(err) && err.status === 401)
+            setFormError(/google/i.test(err.message) ? err.message : 'Usuario o contraseña incorrectos.');
           else setFormError(errorMessage(err));
         },
       },
@@ -66,7 +68,16 @@ export function LoginPage() {
           </>
         }
       />
-      {formError && <FormAlert>{formError}</FormAlert>}
+      {formError ? (
+        <FormAlert>{formError}</FormAlert>
+      ) : (
+        googleError && (
+          <FormAlert>
+            <span className="font-semibold">No pudimos iniciar sesión con Google.</span> Probá de nuevo, o entrá con tu email y contraseña.
+          </FormAlert>
+        )
+      )}
+      <OAuthProviders next={next} />
       <form onSubmit={submit} noValidate className="space-y-4">
         <Field label="Email o usuario" error={errors.login}>
           {(p) => (

@@ -14,14 +14,15 @@ export function useComments(postId: number, sort: CommentSort) {
 export function useCreateComment(postId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { body: string; parentId?: number | null }) =>
+    mutationFn: (input: { body: string; parentId?: number | null; attachmentIds?: number[] }) =>
       api.post<{ comment: Comment }>(`/posts/${postId}/comments`, {
         body: input.body,
         ...(input.parentId ? { parentId: input.parentId } : {}),
+        ...(input.attachmentIds?.length ? { attachmentIds: input.attachmentIds } : {}),
       }),
     meta: { inlineValidation: true },
     onSuccess: ({ comment }) => {
-      insertComment(qc, postId, { ...comment, replies: comment.replies ?? [] });
+      insertComment(qc, postId, { ...comment, replies: comment.replies ?? [], reactions: comment.reactions ?? [], attachments: comment.attachments ?? [] });
       patchPost(qc, postId, (p) => ({ commentCount: p.commentCount + 1 }));
     },
   });
@@ -30,10 +31,15 @@ export function useCreateComment(postId: number) {
 export function useEditComment(postId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: number; body: string }) => api.patch<{ comment: Comment }>(`/comments/${id}`, { body }),
+    mutationFn: ({ id, body, attachmentIds }: { id: number; body: string; attachmentIds?: number[] }) =>
+      api.patch<{ comment: Comment }>(`/comments/${id}`, { body, ...(attachmentIds ? { attachmentIds } : {}) }),
     meta: { inlineValidation: true },
     onSuccess: ({ comment }) =>
-      patchComment(qc, postId, comment.id, { body: comment.body, editedAt: comment.editedAt }),
+      patchComment(qc, postId, comment.id, {
+        body: comment.body,
+        editedAt: comment.editedAt,
+        ...(comment.attachments ? { attachments: comment.attachments } : {}),
+      }),
   });
 }
 
@@ -41,7 +47,8 @@ export function useDeleteComment(postId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.del(`/comments/${id}`),
-    onSuccess: (_d, id) => patchComment(qc, postId, id, { isDeleted: true, body: '', author: null }),
+    onSuccess: (_d, id) =>
+      patchComment(qc, postId, id, { isDeleted: true, body: '', author: null, attachments: [], reactions: [] }),
   });
 }
 

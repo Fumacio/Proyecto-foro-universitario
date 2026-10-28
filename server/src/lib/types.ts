@@ -18,6 +18,14 @@ export interface BanDto {
   createdAt: string;
 }
 
+export interface Preferences {
+  emailReplies: boolean;
+  emailMentions: boolean;
+  emailMessages: boolean;
+  emailFollows: boolean;
+  emailReactions: boolean;
+}
+
 export interface Me extends UserSummary {
   email: string;
   bio: string | null;
@@ -27,6 +35,48 @@ export interface Me extends UserSummary {
   unreadNotifications: number;
   unreadMessages: number;
   ban: BanDto | null;
+  hasPassword: boolean;
+  googleLinked: boolean;
+  preferences: Preferences;
+  draftCount: number;
+}
+
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🤔', '🔥'] as const;
+export type ReactionEmoji = (typeof REACTIONS)[number];
+
+export interface ReactionSummary {
+  emoji: ReactionEmoji;
+  count: number;
+  reacted: boolean;
+}
+
+export type AttachmentKind = 'IMAGE' | 'PDF' | 'DOCUMENT' | 'SPREADSHEET' | 'PRESENTATION' | 'ARCHIVE' | 'TEXT' | 'OTHER';
+
+export interface AttachmentDto {
+  id: number;
+  filename: string;
+  mimeType: string;
+  size: number;
+  kind: AttachmentKind;
+  url: string;
+  previewUrl: string | null;
+  downloadCount: number;
+  createdAt: string;
+}
+
+export interface DraftDto {
+  id: number;
+  communityId: number | null;
+  type: PostType;
+  title: string;
+  body: string;
+  url: string | null;
+  imageUrl: string | null;
+  tagIds: number[];
+  poll: { options: string[]; closesInDays: number | null } | null;
+  attachments: AttachmentDto[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserProfile extends UserSummary {
@@ -102,12 +152,15 @@ export interface PostListItem {
   poll: PollDto | null;
   createdAt: string;
   editedAt: string | null;
+  reactions: ReactionSummary[];
+  attachmentCount: number;
 }
 
 export interface PostDetail extends PostListItem {
   body: string;
   canEdit: boolean;
   canModerate: boolean;
+  attachments: AttachmentDto[];
 }
 
 export interface CommentDto {
@@ -122,6 +175,8 @@ export interface CommentDto {
   isAccepted: boolean;
   createdAt: string;
   editedAt: string | null;
+  reactions: ReactionSummary[];
+  attachments: AttachmentDto[];
   replies: CommentDto[];
 }
 
@@ -129,7 +184,7 @@ export interface CommentWithPost extends Omit<CommentDto, 'replies'> {
   post: { id: number; title: string; community: CommunityRef };
 }
 
-export type NotificationType = 'POST_REPLY' | 'COMMENT_REPLY' | 'MENTION' | 'FOLLOW' | 'ANSWER_ACCEPTED' | 'MOD';
+export type NotificationType = 'POST_REPLY' | 'COMMENT_REPLY' | 'MENTION' | 'FOLLOW' | 'ANSWER_ACCEPTED' | 'MOD' | 'REACTION';
 
 export interface NotificationDto {
   id: number;
@@ -156,6 +211,7 @@ export interface MessageDto {
   sender: UserSummary;
   body: string;
   createdAt: string;
+  attachments: AttachmentDto[];
 }
 
 export type ReportReason = 'SPAM' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OFF_TOPIC' | 'OTHER';

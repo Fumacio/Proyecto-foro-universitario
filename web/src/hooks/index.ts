@@ -73,3 +73,13 @@ export function useLocalStorage<T>(key: string, initial: T) {
   }, [key, value]);
   return [value, setValue] as const;
 }
+
+/** Re-renderiza cada `intervalMs` (para textos tipo "hace 1 min"). */
+export function useNow(intervalMs = 30_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}

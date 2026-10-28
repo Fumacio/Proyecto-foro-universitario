@@ -9,7 +9,7 @@ import { errorMessage, isApiError } from '@/lib/api';
 import { safeNext } from '@/lib/utils';
 import { useMe, useRegister } from '@/queries/auth';
 import { AuthHeader } from './AuthLayout';
-import { FormAlert, PasswordInput, PasswordStrength, passwordValid } from './authBits';
+import { FormAlert, OAuthProviders, PasswordInput, PasswordStrength, passwordValid } from './authBits';
 
 const USERNAME_RE = /^[a-zA-Z0-9_]+$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,6 +92,7 @@ export function RegisterPage() {
         }
       />
       {formError && <FormAlert>{formError}</FormAlert>}
+      <OAuthProviders next={next === '/' ? '/c' : next} dividerLabel="o registrate con tu email" />
       <form onSubmit={submit} noValidate className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Usuario" error={errors.username} hint="Letras, números y _">

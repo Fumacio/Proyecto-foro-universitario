@@ -32,6 +32,18 @@ enum NotificationType {
   FOLLOW
   ANSWER_ACCEPTED
   MOD
+  REACTION
+}
+
+enum AttachmentKind {
+  IMAGE
+  PDF
+  DOCUMENT
+  SPREADSHEET
+  PRESENTATION
+  ARCHIVE
+  TEXT
+  OTHER
 }
 
 enum ReportReason {
@@ -55,7 +67,10 @@ model User {
   usernameKey  String   @unique
   /// siempre en minúsculas
   email        String   @unique
-  passwordHash String
+  /// null = cuenta creada con Google que nunca puso contraseña
+  passwordHash String?
+  /// `sub` de Google (login con Google)
+  googleId     String?  @unique
   displayName  String?
   bio          String?
   career       String?
@@ -63,6 +78,14 @@ model User {
   role         Role     @default(STUDENT)
   /// se incrementa al cambiar/resetear la contraseña: invalida los JWT viejos
   tokenVersion Int      @default(0)
+
+  // Preferencias de avisos por mail
+  emailReplies   Boolean @default(true)
+  emailMentions  Boolean @default(true)
+  emailMessages  Boolean @default(true)
+  emailFollows   Boolean @default(false)
+  emailReactions Boolean @default(false)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -86,6 +109,11 @@ model User {
   bansIssued           Ban[]                     @relation("BanIssuer")
   bansLifted           Ban[]                     @relation("BanLifter")
   passwordResets       PasswordReset[]
+  postReactions        PostReaction[]
+  commentReactions     CommentReaction[]
+  attachments          Attachment[]
+  drafts               Draft[]
+  emailLogs            EmailLog[]
 
   @@index([role])
   @@index([createdAt])
@@ -105,6 +133,7 @@ model Community {
 
   posts       Post[]
   memberships Membership[]
+  drafts      Draft[]
 }
 
 model Membership {
@@ -163,6 +192,8 @@ model Post {
   pollVotes     PollVote[]
   notifications Notification[]
   reports       Report[]
+  reactions     PostReaction[]
+  attachments   Attachment[]
 
   @@index([hot])
   @@index([createdAt])
@@ -230,6 +261,8 @@ model Comment {
   votes         CommentVote[]
   notifications Notification[]
   reports       Report[]
+  reactions     CommentReaction[]
+  attachments   Attachment[]
 
   @@index([postId, createdAt])
   @@index([parentId])
@@ -342,6 +375,7 @@ model Message {
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  attachments    Attachment[]
 
   @@index([conversationId, id])
   @@index([conversationId, createdAt])
@@ -398,4 +432,100 @@ model PasswordReset {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------- v2.1 ----------
+
+/// Una fila por (usuario, post, emoji): se puede reaccionar con varios emojis distintos.
+model PostReaction {
+  userId    Int
+  postId    Int
+  emoji     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId, emoji])
+  @@index([postId, emoji])
+}
+
+model CommentReaction {
+  userId    Int
+  commentId Int
+  emoji     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId, emoji])
+  @@index([commentId, emoji])
+}
+
+/// Archivo adjunto. Queda "suelto" (sin post/comentario/mensaje/borrador) hasta que se usa;
+/// los sueltos con más de 24 h se borran solos. El archivo vive en UPLOAD_DIR/files/<storedName>.
+model Attachment {
+  id            Int            @id @default(autoincrement())
+  uploaderId    Int?
+  postId        Int?
+  commentId     Int?
+  messageId     Int?
+  draftId       Int?
+  /// nombre original saneado
+  filename      String
+  /// nombre aleatorio en disco (sin extensión)
+  storedName    String         @unique
+  mimeType      String
+  size          Int
+  kind          AttachmentKind
+  downloadCount Int            @default(0)
+  createdAt     DateTime       @default(now())
+  uploader      User?          @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+  post          Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment       Comment?       @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  message       Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  draft         Draft?         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([uploaderId, createdAt])
+  @@index([postId])
+  @@index([commentId])
+  @@index([messageId])
+  @@index([draftId])
+  @@index([createdAt])
+}
+
+model Draft {
+  id          Int          @id @default(autoincrement())
+  userId      Int
+  communityId Int?
+  type        PostType     @default(TEXT)
+  title       String       @default("")
+  body        String       @default("")
+  url         String?
+  imageUrl    String?
+  /// number[]
+  tagIds      Json         @default("[]")
+  /// { options: string[]; closesInDays: number | null } | null
+  poll        Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community   Community?   @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([userId, updatedAt])
+}
+
+/// Mails de aviso enviados (anti-spam: 1 por usuario/tipo/post-o-conversación cada 15 min, 20 por día).
+model EmailLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  /// NotificationType | "MESSAGE"
+  kind      String
+  /// "post:12" | "conv:3" | ""
+  scope     String   @default("")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, kind, scope, createdAt])
 }

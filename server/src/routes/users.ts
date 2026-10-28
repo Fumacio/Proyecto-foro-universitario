@@ -1,22 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { LOOSE, removeStoredFiles, storedNamesWhere } from '../lib/attachments.js';
 import { clearAuthCookie, verifyPassword } from '../lib/auth.js';
 import { HttpError, notFound } from '../lib/errors.js';
 import { notify } from '../lib/notify.js';
-import { listPosts, postOrderBy, refreshCommentScore, refreshPostScore } from '../lib/posts.js';
+import { listPosts, postOrderBy, refreshCommentScore, refreshPostScore, serializePosts } from '../lib/posts.js';
 import { prisma } from '../lib/prisma.js';
+import { commentReactionSummaries } from '../lib/reactions.js';
 import {
   commentWithPostInclude,
   iso,
   postInclude,
   toCommentWithPost,
-  toPostListItem,
   toUserSummary,
   userSummarySelect,
 } from '../lib/serializers.js';
 import type { UserProfile } from '../lib/types.js';
 import { deleteUpload, imageUpload, saveImage } from '../lib/upload.js';
-import { buildMe, findUserByUsername, getActiveBan, getKarma } from '../lib/users.js';
+import { buildMe, findUserByUsername, getActiveBan, getKarma, toPreferences } from '../lib/users.js';
 import { limitSchema, nullableText, pageSchema, paginate, paginationSchema, parse } from '../lib/validate.js';
 import { authUser, requireAuth, requireWriter } from '../middleware/auth.js';
 import { actionLimiter } from '../middleware/rateLimit.js';
@@ -67,20 +68,63 @@ router.delete('/me/avatar', requireAuth, async (req, res) => {
   res.json({ user: await buildMe(updated) });
 });
 
+// ---------- preferencias ----------
+
+router.get('/me/preferences', requireAuth, (req, res) => {
+  res.json({ preferences: toPreferences(authUser(req)) });
+});
+
+const preferencesSchema = z.object({
+  emailReplies: z.boolean().optional(),
+  emailMentions: z.boolean().optional(),
+  emailMessages: z.boolean().optional(),
+  emailFollows: z.boolean().optional(),
+  emailReactions: z.boolean().optional(),
+});
+
+router.patch('/me/preferences', requireAuth, async (req, res) => {
+  const user = authUser(req);
+  const data = parse(preferencesSchema, req.body);
+  const changes = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+  const updated = Object.keys(changes).length > 0 ? await prisma.user.update({ where: { id: user.id }, data: changes }) : user;
+  res.json({ preferences: toPreferences(updated) });
+});
+
+// ---------- borrar la cuenta ----------
+
+const deleteMeSchema = z.object({
+  password: z.string().max(200).optional(),
+  confirmUsername: z.string().trim().max(40).optional(),
+});
+
 router.delete('/me', requireAuth, async (req, res) => {
   const user = authUser(req);
-  const { password } = parse(
-    z.object({ password: z.string({ error: 'Ingresá tu contraseña' }).min(1, 'Ingresá tu contraseña').max(200) }),
-    req.body,
-  );
-  if (!(await verifyPassword(password, user.passwordHash))) {
-    throw new HttpError(400, 'VALIDATION', 'La contraseña es incorrecta', { password: 'La contraseña es incorrecta' });
+  const { password, confirmUsername } = parse(deleteMeSchema, req.body);
+  if (user.passwordHash !== null) {
+    if (!password) throw new HttpError(400, 'VALIDATION', 'Ingresá tu contraseña', { password: 'Ingresá tu contraseña' });
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      throw new HttpError(400, 'VALIDATION', 'La contraseña es incorrecta', { password: 'La contraseña es incorrecta' });
+    }
+  } else if (!confirmUsername || confirmUsername.replace(/^@/, '').toLowerCase() !== user.usernameKey) {
+    // Cuenta creada con Google sin contraseña: se confirma escribiendo el nombre de usuario.
+    throw new HttpError(400, 'VALIDATION', 'Escribí tu nombre de usuario para confirmar', {
+      confirmUsername: 'Escribí tu nombre de usuario para confirmar',
+    });
   }
   const [postVotes, commentVotes] = await Promise.all([
     prisma.postVote.findMany({ where: { userId: user.id }, select: { postId: true } }),
     prisma.commentVote.findMany({ where: { userId: user.id }, select: { commentId: true } }),
   ]);
+  // Adjuntos que se van con la cuenta: DMs, borradores y los sueltos. Los de posts/comentarios quedan.
+  const files = await storedNamesWhere({
+    OR: [
+      { message: { conversation: { participants: { some: { userId: user.id } } } } },
+      { draft: { userId: user.id } },
+      { uploaderId: user.id, ...LOOSE },
+    ],
+  });
   await prisma.$transaction(async (tx) => {
+    await tx.attachment.deleteMany({ where: { uploaderId: user.id, ...LOOSE } });
     // Los DMs no tienen sentido sin la otra persona: se borran las conversaciones.
     await tx.conversation.deleteMany({ where: { participants: { some: { userId: user.id } } } });
     // Posts y comentarios quedan con author null (onDelete: SetNull); votos, membresías, etc. en cascada.
@@ -89,6 +133,7 @@ router.delete('/me', requireAuth, async (req, res) => {
     for (const { commentId } of commentVotes) await refreshCommentScore(tx, commentId);
   });
   await deleteUpload(user.avatarUrl);
+  await removeStoredFiles(files);
   clearAuthCookie(res);
   res.status(204).end();
 });
@@ -107,7 +152,7 @@ router.get('/me/bookmarks', requireAuth, async (req, res) => {
     }),
     prisma.bookmark.count({ where }),
   ]);
-  res.json(paginate(rows.map((b) => toPostListItem(b.post)), page, limit, total));
+  res.json(paginate(await serializePosts(rows.map((b) => b.post), user.id), page, limit, total));
 });
 
 // ---------- /users/:username ----------
@@ -163,17 +208,22 @@ router.get('/:username/comments', async (req, res) => {
   const user = await userOr404(String(req.params.username));
   const { page, limit } = parse(paginationSchema, req.query);
   const where = { authorId: user.id, isDeleted: false };
+  const viewerId = req.user?.id ?? null;
   const [rows, total] = await Promise.all([
     prisma.comment.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * limit,
       take: limit + 1,
-      include: commentWithPostInclude(req.user?.id ?? null),
+      include: commentWithPostInclude(viewerId),
     }),
     prisma.comment.count({ where }),
   ]);
-  res.json(paginate(rows.map(toCommentWithPost), page, limit, total));
+  const reactions = await commentReactionSummaries(
+    rows.map((c) => c.id),
+    viewerId,
+  );
+  res.json(paginate(rows.map((c) => toCommentWithPost(c, reactions.get(c.id))), page, limit, total));
 });
 
 async function followList(username: string, query: unknown, direction: 'followers' | 'following') {

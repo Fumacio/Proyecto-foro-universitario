@@ -6,6 +6,7 @@ import { longDate } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { useMe } from '@/queries/auth';
 import { CommandPalette } from '../CommandPalette';
+import { IOSInstallDialog } from '../pwa/InstallApp';
 import { PageSpinner } from '../ui/Spinner';
 import { MobileTabBar } from './MobileTabBar';
 import { Navbar } from './Navbar';
@@ -59,6 +60,7 @@ export function AppShell() {
       <MobileTabBar />
       <MobileDrawer />
       <CommandPalette />
+      <IOSInstallDialog />
     </div>
   );
 }

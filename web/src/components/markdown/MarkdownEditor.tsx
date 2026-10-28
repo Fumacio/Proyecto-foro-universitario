@@ -39,6 +39,15 @@ interface Props {
   footer?: ReactNode;
   className?: string;
   allowImages?: boolean;
+  /**
+   * Si está, los archivos arrastrados al editor (y los que no son imagen al pegar) se mandan acá
+   * para adjuntarlos. Pegar una imagen sigue insertándola en el texto.
+   */
+  onAttachFiles?: (files: File[]) => void;
+  /** Lista de adjuntos (se muestra entre el texto y la barra inferior). */
+  attachments?: ReactNode;
+  /** Contenido a la izquierda de la barra inferior (p. ej. el botón 📎). */
+  footerStart?: ReactNode;
 }
 
 type Edit = { start: number; end: number; text: string; selStart: number; selEnd: number };
@@ -63,6 +72,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
     footer,
     className,
     allowImages = true,
+    onAttachFiles,
+    attachments,
+    footerStart,
   },
   ref,
 ) {
@@ -320,24 +332,29 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
             }
           }}
           onPaste={(e) => {
-            if (!allowImages) return;
             const files = Array.from(e.clipboardData.files ?? []);
-            if (files.some((f) => f.type.startsWith('image/'))) {
-              e.preventDefault();
-              void uploadFiles(files);
-            }
+            if (files.length === 0) return;
+            const images = allowImages ? files.filter((f) => f.type.startsWith('image/')) : [];
+            const others = files.filter((f) => !images.includes(f));
+            if (images.length === 0 && !onAttachFiles) return;
+            e.preventDefault();
+            if (images.length) void uploadFiles(images);
+            if (others.length) onAttachFiles?.(others);
           }}
           onDragOver={(e) => {
-            if (!allowImages || !e.dataTransfer.types.includes('Files')) return;
+            if ((!allowImages && !onAttachFiles) || !e.dataTransfer.types.includes('Files')) return;
             e.preventDefault();
             setDragging(true);
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
             setDragging(false);
-            if (!allowImages) return;
             const files = Array.from(e.dataTransfer.files ?? []);
-            if (files.length) {
+            if (files.length === 0) return;
+            if (onAttachFiles) {
+              e.preventDefault();
+              onAttachFiles(files);
+            } else if (allowImages) {
               e.preventDefault();
               void uploadFiles(files);
             }
@@ -354,16 +371,23 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function M
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <p className="hidden text-xs text-zinc-400 sm:block dark:text-zinc-500">
-          {uploading > 0 ? (
-            <span className="text-brand-600 dark:text-brand-400">Subiendo {uploading > 1 ? `${uploading} imágenes` : 'imagen'}…</span>
-          ) : allowImages ? (
-            'Markdown · Pegá o arrastrá imágenes'
-          ) : (
-            'Markdown soportado'
-          )}
-        </p>
+      {attachments && <div className="px-3 pb-3 pt-1">{attachments}</div>}
+
+      <div className={cn('flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 py-2 dark:border-zinc-800', footerStart ? 'pl-1.5 pr-3' : 'px-3')}>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {footerStart}
+          <p className="hidden truncate text-xs text-zinc-400 sm:block dark:text-zinc-500">
+            {uploading > 0 ? (
+              <span className="text-brand-600 dark:text-brand-400">Subiendo {uploading > 1 ? `${uploading} imágenes` : 'imagen'}…</span>
+            ) : onAttachFiles ? (
+              'Markdown · Arrastrá archivos para adjuntarlos'
+            ) : allowImages ? (
+              'Markdown · Pegá o arrastrá imágenes'
+            ) : (
+              'Markdown soportado'
+            )}
+          </p>
+        </div>
         <div className="ml-auto flex items-center gap-3">
           {maxLength != null && (
             <span

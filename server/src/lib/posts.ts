@@ -1,9 +1,17 @@
 import type { Prisma } from '@prisma/client';
 import { notFound } from './errors.js';
 import { prisma } from './prisma.js';
-import { postInclude, toPostListItem } from './serializers.js';
+import { postReactionSummaries } from './reactions.js';
+import {
+  postDetailInclude,
+  postInclude,
+  toPostDetail,
+  toPostListItem,
+  type PostDetailRow,
+  type PostRow,
+} from './serializers.js';
 import { hotScore } from './text.js';
-import type { PostListItem } from './types.js';
+import type { PostDetail, PostListItem, Role } from './types.js';
 import { paginate, type Paginated } from './validate.js';
 
 export type PostSort = 'hot' | 'new' | 'top' | 'comments';
@@ -53,11 +61,25 @@ export async function listPosts(opts: {
     }),
     prisma.post.count({ where: opts.where }),
   ]);
-  return paginate(rows.map(toPostListItem), opts.page, opts.limit, total);
+  return paginate(await serializePosts(rows, opts.viewerId), opts.page, opts.limit, total);
 }
 
-export async function getPostRowOrThrow(id: number, viewerId: number | null) {
-  const post = await prisma.post.findUnique({ where: { id }, include: postInclude(viewerId) });
+/** PostListItem[] con reacciones calculadas por lote (sin N+1). */
+export async function serializePosts(rows: PostRow[], viewerId: number | null): Promise<PostListItem[]> {
+  const reactions = await postReactionSummaries(
+    rows.map((r) => r.id),
+    viewerId,
+  );
+  return rows.map((r) => toPostListItem(r, reactions.get(r.id)));
+}
+
+export async function serializePostDetail(row: PostDetailRow, viewer: { id: number; role: Role } | null | undefined): Promise<PostDetail> {
+  const reactions = await postReactionSummaries([row.id], viewer?.id ?? null);
+  return toPostDetail(row, viewer, reactions.get(row.id));
+}
+
+export async function getPostRowOrThrow(id: number, viewerId: number | null): Promise<PostDetailRow> {
+  const post = await prisma.post.findUnique({ where: { id }, include: postDetailInclude(viewerId) });
   if (!post) throw notFound('El post no existe o fue eliminado');
   return post;
 }

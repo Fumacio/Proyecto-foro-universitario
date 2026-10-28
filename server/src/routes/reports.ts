@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { deleteAttachmentsWhere, postAttachmentsWhere, removeStoredFiles } from '../lib/attachments.js';
 import { HttpError, notFound } from '../lib/errors.js';
 import { notify } from '../lib/notify.js';
 import { refreshCommentCount } from '../lib/posts.js';
@@ -103,6 +104,7 @@ router.patch('/:id', requireMod, requireWriter, async (req, res) => {
   const now = new Date();
   const reason = REASON_LABEL[report.reason];
   let removedFor: { userId: number; message: string; postId: number | null } | null = null;
+  const files: string[] = [];
 
   await prisma.$transaction(async (tx) => {
     await tx.report.update({ where: { id }, data: { status, resolvedById: mod.id, resolvedAt: now } });
@@ -113,6 +115,7 @@ router.patch('/:id', requireMod, requireWriter, async (req, res) => {
         where: { status: 'PENDING', OR: [{ postId: report.post.id }, { comment: { postId: report.post.id } }] },
         data: { status: 'RESOLVED', resolvedById: mod.id, resolvedAt: now },
       });
+      files.push(...(await deleteAttachmentsWhere(tx, postAttachmentsWhere(report.post.id))));
       await tx.post.delete({ where: { id: report.post.id } });
       if (report.post.authorId) {
         removedFor = {
@@ -128,6 +131,7 @@ router.patch('/:id', requireMod, requireWriter, async (req, res) => {
         data: { status: 'RESOLVED', resolvedById: mod.id, resolvedAt: now },
       });
       await tx.comment.update({ where: { id: c.id }, data: { isDeleted: true } });
+      files.push(...(await deleteAttachmentsWhere(tx, { commentId: c.id })));
       if (c.post.acceptedCommentId === c.id) await tx.post.update({ where: { id: c.postId }, data: { acceptedCommentId: null } });
       await refreshCommentCount(tx, c.postId);
       if (c.authorId) {
@@ -140,6 +144,7 @@ router.patch('/:id', requireMod, requireWriter, async (req, res) => {
     }
   });
 
+  await removeStoredFiles(files);
   const removal = removedFor as { userId: number; message: string; postId: number | null } | null;
   // Las notificaciones de moderación no exponen qué moderador actuó (actor null).
   if (removal && removal.userId !== mod.id) {

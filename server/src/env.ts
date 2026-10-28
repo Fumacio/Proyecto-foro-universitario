@@ -60,6 +60,11 @@ function parseTrustProxy(value: string | undefined): boolean | number | string {
 
 const PORT = Number(process.env.PORT) || 3000;
 
+function positiveNumber(value: string | undefined, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export const env = {
   NODE_ENV,
   isProd,
@@ -82,6 +87,36 @@ export const env = {
     from: process.env.SMTP_FROM?.trim() || 'Foro UTN <no-reply@foro.utn>',
   },
   UPLOAD_DIR: path.resolve(SERVER_ROOT, process.env.UPLOAD_DIR?.trim() || 'uploads'),
+  /** Tamaño máximo por archivo adjunto (MB). */
+  MAX_UPLOAD_MB: positiveNumber(process.env.MAX_UPLOAD_MB, 25),
+  /** Cuota de adjuntos por usuario cada 24 h (MB). */
+  UPLOAD_QUOTA_MB_PER_DAY: positiveNumber(process.env.UPLOAD_QUOTA_MB_PER_DAY, 200),
   /** Build del front que se sirve en producción (por defecto ../web/dist). */
   WEB_DIST: path.resolve(SERVER_ROOT, process.env.WEB_DIST?.trim() || '../web/dist'),
 } as const;
+
+/**
+ * Login con Google. Se lee en cada uso (no al arrancar) para que los tests puedan apuntar los
+ * endpoints a un servidor OAuth falso. Los endpoints se pueden sobreescribir con GOOGLE_*_URL.
+ */
+export function googleConfig(): {
+  enabled: boolean;
+  clientId: string;
+  clientSecret: string;
+  authUrl: string;
+  tokenUrl: string;
+  userinfoUrl: string;
+  redirectUri: string;
+} {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim() ?? '';
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() ?? '';
+  return {
+    enabled: clientId !== '' && clientSecret !== '',
+    clientId,
+    clientSecret,
+    authUrl: process.env.GOOGLE_AUTH_URL?.trim() || 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: process.env.GOOGLE_TOKEN_URL?.trim() || 'https://oauth2.googleapis.com/token',
+    userinfoUrl: process.env.GOOGLE_USERINFO_URL?.trim() || 'https://openidconnect.googleapis.com/v1/userinfo',
+    redirectUri: `${env.FRONTEND_URL}/api/auth/google/callback`,
+  };
+}

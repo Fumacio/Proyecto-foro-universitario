@@ -21,12 +21,13 @@ interface DialogProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   trigger?: ReactNode;
   className?: string;
+  bodyClassName?: string;
   hideClose?: boolean;
 }
 
 const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' };
 
-export function Dialog({ open, onOpenChange, title, description, children, footer, size = 'md', trigger, className, hideClose }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, footer, size = 'md', trigger, className, bodyClassName, hideClose }: DialogProps) {
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <RD.Trigger asChild>{trigger}</RD.Trigger>}
@@ -56,7 +57,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
               </RD.Close>
             )}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">{children}</div>
+          <div className={cn('min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4', bodyClassName)}>{children}</div>
           {footer && (
             <div className="flex flex-wrap items-center justify-end gap-2 rounded-b-2xl border-t border-zinc-100 bg-zinc-50/70 px-5 py-3.5 dark:border-zinc-800 dark:bg-zinc-900/80">
               {footer}

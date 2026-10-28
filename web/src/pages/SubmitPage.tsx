@@ -3,33 +3,48 @@ import {
   Check,
   ChevronDown,
   CircleQuestionMark,
+  CloudCheck,
+  CloudOff,
+  FilePen,
+  FilePlus,
   FileText,
   Lightbulb,
   Link2,
   Plus,
   Search,
   Send,
+  Trash,
+  WifiOff,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { AttachmentPicker } from '@/components/attachments/AttachmentPicker';
+import { useAttachmentUploads } from '@/components/attachments/useAttachmentUploads';
 import { CommunityIcon } from '@/components/common';
+import { DraftList } from '@/components/drafts/DraftList';
 import { ImageDropzone } from '@/components/ImageDropzone';
 import { PageLayout } from '@/components/layout/AppShell';
 import { CommunityAbout } from '@/components/layout/RightRail';
 import { MarkdownEditor } from '@/components/markdown/MarkdownEditor';
 import { MAX_TAGS, TagPicker } from '@/components/posts/TagPicker';
 import { Button, buttonVariants } from '@/components/ui/Button';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import { FieldError, Input, Select, inputClass } from '@/components/ui/Input';
-import { Card, Skeleton } from '@/components/ui/misc';
+import { Card, ErrorState, Skeleton } from '@/components/ui/misc';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
-import { useDocumentTitle } from '@/hooks';
+import { Spinner } from '@/components/ui/Spinner';
+import { useDocumentTitle, useNow } from '@/hooks';
 import { isApiError } from '@/lib/api';
-import type { Community, CreatePostInput, PostType } from '@/lib/types';
+import { ATTACHMENT_LIMITS } from '@/lib/attachments';
+import { timeAgo } from '@/lib/time';
+import type { Attachment, Community, CreatePostInput, Draft, DraftInput, PostType } from '@/lib/types';
 import { cn, formatCount, postPath } from '@/lib/utils';
+import { useMe } from '@/queries/auth';
 import { useCommunities } from '@/queries/communities';
+import { useDeleteDraft, useDraft, useDrafts, useSaveDraft } from '@/queries/drafts';
 import { useCreatePost } from '@/queries/posts';
 
 const TYPES: { value: PostType; label: string; icon: LucideIcon; hint: string }[] = [
@@ -48,23 +63,219 @@ const DURATIONS: { value: string; label: string }[] = [
   { value: '30', label: '30 días' },
 ];
 
-const DRAFT_KEY = 'foro:draft';
+const AUTOSAVE_MS = 1500;
+const MAX_FILES = ATTACHMENT_LIMITS.post;
 
-interface Draft {
+/* ---------------- Respaldo local (si el server no está disponible) ---------------- */
+
+const LOCAL_KEY = 'foro:draft';
+
+/** Copia local del borrador: se escribe solo cuando no se pudo guardar en el server (o al cerrar la pestaña). */
+interface LocalDraft {
+  draftId?: number | null;
+  communityId?: number | null;
   type: PostType;
   title: string;
   body: string;
   url: string;
-  options: string[];
+  imageUrl?: string | null;
+  tagIds?: number[];
+  options?: string[];
+  duration?: string;
+  attachments?: Attachment[];
+  savedAt?: number;
 }
 
-function readDraft(): Draft | null {
+function readLocalDraft(): LocalDraft | null {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as Draft) : null;
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as LocalDraft;
+    return d && typeof d === 'object' && (d.title || d.body || d.url || d.attachments?.length) ? d : null;
   } catch {
     return null;
   }
+}
+
+function writeLocalDraft(d: LocalDraft) {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify({ ...d, savedAt: Date.now() }));
+  } catch {
+    /* storage lleno o bloqueado */
+  }
+}
+
+function clearLocalDraft() {
+  try {
+    localStorage.removeItem(LOCAL_KEY);
+  } catch {
+    /* ignorar */
+  }
+}
+
+/* ---------------- Estado inicial del formulario ---------------- */
+
+interface FormInit {
+  draftId: number | null;
+  communityId: number | null;
+  type: PostType;
+  title: string;
+  body: string;
+  url: string;
+  imageUrl: string | null;
+  tagIds: number[];
+  options: string[];
+  duration: string;
+  attachments: Attachment[];
+  savedAt: number | null;
+  restoredLocal: boolean;
+}
+
+const EMPTY_INIT: FormInit = {
+  draftId: null,
+  communityId: null,
+  type: 'TEXT',
+  title: '',
+  body: '',
+  url: '',
+  imageUrl: null,
+  tagIds: [],
+  options: ['', ''],
+  duration: '7',
+  attachments: [],
+  savedAt: null,
+  restoredLocal: false,
+};
+
+function fromDraft(d: Draft): FormInit {
+  const opts = d.poll?.options?.length ? d.poll.options : ['', ''];
+  return {
+    draftId: d.id,
+    communityId: d.communityId,
+    type: d.type ?? 'TEXT',
+    title: d.title ?? '',
+    body: d.body ?? '',
+    url: d.url ?? '',
+    imageUrl: d.imageUrl ?? null,
+    tagIds: d.tagIds ?? [],
+    options: opts.length >= 2 ? opts : [...opts, ''],
+    duration: d.poll ? (d.poll.closesInDays == null ? '' : String(d.poll.closesInDays)) : '7',
+    attachments: d.attachments ?? [],
+    savedAt: Date.parse(d.updatedAt) || null,
+    restoredLocal: false,
+  };
+}
+
+function fromLocal(d: LocalDraft): FormInit {
+  return {
+    draftId: d.draftId ?? null,
+    communityId: d.communityId ?? null,
+    type: d.type ?? 'TEXT',
+    title: d.title ?? '',
+    body: d.body ?? '',
+    url: d.url ?? '',
+    imageUrl: d.imageUrl ?? null,
+    tagIds: d.tagIds ?? [],
+    options: d.options?.length ? d.options : ['', ''],
+    duration: d.duration ?? '7',
+    attachments: d.attachments ?? [],
+    savedAt: null,
+    restoredLocal: true,
+  };
+}
+
+/* ---------------- Estado del autoguardado ---------------- */
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
+
+function SaveIndicator({ status, savedAt, onRetry, className }: { status: SaveStatus; savedAt: number | null; onRetry: () => void; className?: string }) {
+  useNow(20_000);
+  const base = cn('flex min-w-0 items-center gap-1.5 text-xs', className);
+  if (status === 'saving')
+    return (
+      <p className={cn(base, 'text-zinc-500 dark:text-zinc-400')} aria-live="polite">
+        <Spinner className="size-3.5" label="Guardando" />
+        Guardando…
+      </p>
+    );
+  if (status === 'error')
+    return (
+      <p className={cn(base, 'text-rose-600 dark:text-rose-400')} role="status">
+        <CloudOff className="size-3.5 shrink-0" />
+        <span className="truncate">No se pudo guardar el borrador.</span>
+        <button type="button" onClick={onRetry} className="shrink-0 font-semibold underline-offset-2 hover:underline">
+          Reintentar
+        </button>
+      </p>
+    );
+  if (status === 'offline')
+    return (
+      <p className={cn(base, 'text-amber-700 dark:text-amber-400')} role="status">
+        <WifiOff className="size-3.5 shrink-0" />
+        <span className="truncate">Sin conexión: lo guardamos en este dispositivo.</span>
+      </p>
+    );
+  if (status === 'saved' && savedAt) {
+    const ago = timeAgo(new Date(savedAt));
+    return (
+      <p className={cn(base, 'text-zinc-500 dark:text-zinc-400')} aria-live="polite">
+        <CloudCheck className="size-3.5 shrink-0 text-emerald-500" />
+        <span className="truncate">{ago === 'ahora' ? 'Borrador guardado' : `Borrador guardado ${ago}`}</span>
+      </p>
+    );
+  }
+  return (
+    <p className={cn(base, 'text-zinc-400 dark:text-zinc-500')}>
+      <CloudCheck className="size-3.5 shrink-0" />
+      <span className="truncate">Se guarda solo como borrador mientras escribís</span>
+    </p>
+  );
+}
+
+/* ---------------- Diálogo de borradores ---------------- */
+
+function DraftsDialog({ open, onOpenChange, currentId, onOpenDraft }: { open: boolean; onOpenChange: (o: boolean) => void; currentId: number | null; onOpenDraft: (id: number | null) => void }) {
+  const q = useDrafts(open);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Tus borradores"
+      description="Se guardan solos mientras escribís. Elegí uno para seguir."
+      size="lg"
+      bodyClassName="px-0 pb-2 pt-3"
+      footer={
+        <>
+          <Link to="/drafts" onClick={() => onOpenChange(false)} className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'mr-auto' })}>
+            Ver todos
+          </Link>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onOpenChange(false);
+              onOpenDraft(null);
+            }}
+          >
+            <FilePlus />
+            Empezar uno nuevo
+          </Button>
+        </>
+      }
+    >
+      <DraftList
+        drafts={q.data}
+        loading={q.isPending}
+        error={q.isError ? q.error : null}
+        onRetry={() => void q.refetch()}
+        currentId={currentId}
+        onOpen={(d) => {
+          onOpenChange(false);
+          if (d.id !== currentId) onOpenDraft(d.id);
+        }}
+      />
+    </Dialog>
+  );
 }
 
 function CommunityPicker({
@@ -174,63 +385,175 @@ function CommunityPicker({
   );
 }
 
-export default function SubmitPage() {
-  useDocumentTitle('Crear post');
+/* ---------------- Editor ---------------- */
+
+function SubmitEditor({
+  init,
+  onDraftCreated,
+  onOpenDraft,
+}: {
+  init: FormInit;
+  onDraftCreated: (id: number) => void;
+  onOpenDraft: (id: number | null) => void;
+}) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { me } = useMe();
   const communities = useCommunities();
   const create = useCreatePost();
-  const draft = useMemo(readDraft, []);
+  const saveDraft = useSaveDraft();
+  const deleteDraft = useDeleteDraft();
+  const drafts = useDrafts();
 
   const [community, setCommunity] = useState<Community | undefined>();
-  const [type, setType] = useState<PostType>(draft?.type ?? 'TEXT');
-  const [title, setTitle] = useState(draft?.title ?? '');
-  const [body, setBody] = useState(draft?.body ?? '');
-  const [url, setUrl] = useState(draft?.url ?? '');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [tagIds, setTagIds] = useState<number[]>([]);
-  const [options, setOptions] = useState<string[]>(draft?.options?.length ? draft.options : ['', '']);
-  const [duration, setDuration] = useState('7');
+  const [type, setType] = useState<PostType>(init.type);
+  const [title, setTitle] = useState(init.title);
+  const [body, setBody] = useState(init.body);
+  const [url, setUrl] = useState(init.url);
+  const [imageUrl, setImageUrl] = useState<string | null>(init.imageUrl);
+  const [tagIds, setTagIds] = useState<number[]>(init.tagIds);
+  const [options, setOptions] = useState<string[]>(init.options);
+  const [duration, setDuration] = useState(init.duration);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [restored, setRestored] = useState(!!draft && !!(draft.title || draft.body));
+  const [restored, setRestored] = useState(init.restoredLocal);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const uploads = useAttachmentUploads({ max: MAX_FILES, initial: init.attachments, deleteOnRemove: 'all' });
 
-  // Preselección por ?community=slug
+  // Autoguardado
+  const draftIdRef = useRef<number | null>(init.draftId);
+  const [draftId, setDraftId] = useState<number | null>(init.draftId);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(init.draftId && !init.restoredLocal ? 'saved' : 'idle');
+  const [savedAt, setSavedAt] = useState<number | null>(init.savedAt);
+  const inFlight = useRef<Promise<void> | null>(null);
+  const publishing = useRef(false);
+
+  // Preselección: la comunidad del borrador, o ?community=slug
+  const initialCommunityResolved = useRef(false);
   useEffect(() => {
-    if (community || !communities.data) return;
+    if (initialCommunityResolved.current || !communities.data) return;
+    initialCommunityResolved.current = true;
     const slug = params.get('community');
-    const found = slug ? communities.data.find((c) => c.slug === slug) : undefined;
+    const found =
+      init.communityId != null ? communities.data.find((c) => c.id === init.communityId) : slug ? communities.data.find((c) => c.slug === slug) : undefined;
     if (found) setCommunity(found);
-  }, [communities.data, params, community]);
+  }, [communities.data, params, init.communityId]);
 
-  // Autoguardado del borrador (solo en este navegador)
-  useEffect(() => {
-    const t = setTimeout(() => {
+  const closesInDays = duration ? Number(duration) : null;
+  const snapshot = (): DraftInput => ({
+    communityId: community?.id ?? init.communityId ?? null,
+    type,
+    title,
+    body,
+    url: url.trim() ? url : null,
+    imageUrl,
+    tagIds,
+    poll: type === 'POLL' ? { options, closesInDays } : null,
+    attachmentIds: uploads.ids,
+  });
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
+  const fieldsKey = JSON.stringify([community?.id ?? init.communityId, type, title, body, url, imageUrl, tagIds, options, duration, uploads.ids]);
+  const keyRef = useRef(fieldsKey);
+  keyRef.current = fieldsKey;
+  const savedKey = useRef(init.restoredLocal ? '' : fieldsKey);
+  const hasContent = !!(title.trim() || body.trim() || url.trim() || uploads.count > 0);
+
+  const localCopy = useCallback(
+    (): LocalDraft => {
+      const s = snapshotRef.current();
+      return {
+        draftId: draftIdRef.current,
+        communityId: s.communityId ?? null,
+        type: s.type ?? 'TEXT',
+        title: s.title ?? '',
+        body: s.body ?? '',
+        url: s.url ?? '',
+        imageUrl: s.imageUrl ?? null,
+        tagIds: s.tagIds ?? [],
+        options,
+        duration,
+        attachments: uploads.attachments,
+      };
+    },
+    [options, duration, uploads.attachments],
+  );
+  const localCopyRef = useRef(localCopy);
+  localCopyRef.current = localCopy;
+
+  const hasContentRef = useRef(hasContent);
+  hasContentRef.current = hasContent;
+  /** false después de desmontar: no tocar la URL (el usuario ya está en otro borrador o página). */
+  const alive = useRef(true);
+
+  const flush = useCallback(async () => {
+    while (inFlight.current) await inFlight.current;
+    if (publishing.current) return;
+    const key = keyRef.current;
+    if (key === savedKey.current) return;
+    const input = snapshotRef.current();
+    const run = (async () => {
+      setSaveStatus('saving');
       try {
-        if (title || body || url) localStorage.setItem(DRAFT_KEY, JSON.stringify({ type, title, body, url, options } satisfies Draft));
-        else localStorage.removeItem(DRAFT_KEY);
-      } catch {
-        /* ignorar */
+        const { draft } = await saveDraft.mutateAsync({ id: draftIdRef.current, input });
+        if (!draftIdRef.current) {
+          draftIdRef.current = draft.id;
+          setDraftId(draft.id);
+          if (alive.current) onDraftCreated(draft.id);
+        }
+        savedKey.current = key;
+        setSavedAt(Date.now());
+        setSaveStatus('saved');
+        clearLocalDraft();
+      } catch (err) {
+        if (isApiError(err) && err.status === 404 && draftIdRef.current) {
+          // Lo borraron desde otra pestaña: el próximo guardado crea uno nuevo.
+          draftIdRef.current = null;
+          setDraftId(null);
+        }
+        writeLocalDraft(localCopyRef.current());
+        setSaveStatus(isApiError(err) && (err.code === 'NETWORK' || err.status >= 500) ? 'offline' : 'error');
       }
-    }, 500);
-    return () => clearTimeout(t);
-  }, [type, title, body, url, options]);
-
-  const clearDraft = () => {
+    })();
+    inFlight.current = run;
     try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-      /* ignorar */
+      await run;
+    } finally {
+      if (inFlight.current === run) inFlight.current = null;
     }
-  };
+  }, [saveDraft, onDraftCreated]);
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
 
-  const discardDraft = () => {
-    setTitle('');
-    setBody('');
-    setUrl('');
-    setOptions(['', '']);
-    setRestored(false);
-    clearDraft();
-  };
+  // Debounce: guarda ~1,5 s después del último cambio (recién cuando hay algo escrito).
+  useEffect(() => {
+    if (fieldsKey === savedKey.current) return;
+    if (!hasContent && !draftIdRef.current) return;
+    const t = setTimeout(() => void flushRef.current(), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [fieldsKey, hasContent]);
+
+  // Al volver la conexión, reintenta. Al cerrar la pestaña con cambios sin guardar, deja una copia local.
+  useEffect(() => {
+    const online = () => void flushRef.current();
+    const hide = () => {
+      if (!publishing.current && keyRef.current !== savedKey.current && (hasContentRef.current || draftIdRef.current)) writeLocalDraft(localCopyRef.current());
+    };
+    alive.current = true;
+    window.addEventListener('online', online);
+    window.addEventListener('pagehide', hide);
+    return () => {
+      alive.current = false;
+      window.removeEventListener('online', online);
+      window.removeEventListener('pagehide', hide);
+      // Al salir de la página (navegación interna) guardamos lo pendiente.
+      if (!publishing.current && keyRef.current !== savedKey.current && (hasContentRef.current || draftIdRef.current)) {
+        writeLocalDraft(localCopyRef.current());
+        void flushRef.current();
+      }
+    };
+  }, []);
 
   const clearError = (k: string) => errors[k] && setErrors(({ [k]: _drop, ...rest }) => rest);
 
@@ -257,16 +580,24 @@ export default function SubmitPage() {
       else if (new Set(opts.map((o) => o.toLowerCase())).size !== opts.length) e.poll = 'Hay opciones repetidas.';
     }
     if (tagIds.length > MAX_TAGS) e.tags = `Máximo ${MAX_TAGS} etiquetas.`;
+    if (uploads.hasErrors) e.attachmentIds = 'Hay archivos que no se pudieron subir: reintentá o quitalos.';
     return e;
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (uploads.isUploading) {
+      toast.info('Esperá a que terminen de subir los archivos');
+      return;
+    }
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length) {
       toast.error('Revisá los campos marcados');
       return;
     }
+    publishing.current = true;
+    // Si hay un autoguardado en curso, esperamos su id para que el server borre el borrador al publicar.
+    while (inFlight.current) await inFlight.current;
     const input: CreatePostInput = {
       communityId: community!.id,
       type,
@@ -275,20 +606,23 @@ export default function SubmitPage() {
       ...(type === 'LINK' ? { url: url.trim() } : {}),
       ...(imageUrl ? { imageUrl } : {}),
       ...(tagIds.length ? { tagIds } : {}),
-      ...(type === 'POLL'
-        ? { poll: { options: options.map((o) => o.trim()).filter(Boolean), closesInDays: duration ? Number(duration) : null } }
-        : {}),
+      ...(type === 'POLL' ? { poll: { options: options.map((o) => o.trim()).filter(Boolean), closesInDays } } : {}),
+      ...(uploads.ids.length ? { attachmentIds: uploads.ids } : {}),
+      ...(draftIdRef.current ? { draftId: draftIdRef.current } : {}),
     };
     create.mutate(input, {
       onSuccess: ({ post }) => {
-        clearDraft();
+        clearLocalDraft();
+        savedKey.current = keyRef.current;
         toast.success('¡Publicado! 🎉');
         navigate(postPath(post), { replace: true });
       },
       onError: (err) => {
+        publishing.current = false;
         if (isApiError(err) && err.details) {
           const mapped: Record<string, string> = {};
-          for (const [k, v] of Object.entries(err.details)) mapped[k.startsWith('poll') ? 'poll' : k.startsWith('tag') ? 'tags' : k] = v;
+          for (const [k, v] of Object.entries(err.details))
+            mapped[k.startsWith('poll') ? 'poll' : k.startsWith('tag') ? 'tags' : k.startsWith('attachment') ? 'attachmentIds' : k] = v;
           setErrors(mapped);
           toast.error(err.message || 'Revisá los campos marcados');
         }
@@ -296,7 +630,28 @@ export default function SubmitPage() {
     });
   };
 
+  const discard = async () => {
+    publishing.current = true;
+    while (inFlight.current) await inFlight.current;
+    clearLocalDraft();
+    if (draftIdRef.current) {
+      try {
+        await deleteDraft.mutateAsync(draftIdRef.current);
+      } catch (err) {
+        publishing.current = false;
+        throw err;
+      }
+    } else {
+      for (const it of uploads.items) uploads.remove(it.key);
+    }
+    savedKey.current = keyRef.current;
+    toast.success('Borrador descartado');
+    onOpenDraft(null);
+  };
+
   const typeMeta = TYPES.find((t) => t.value === type)!;
+  const draftCount = drafts.data?.length ?? me?.draftCount ?? 0;
+  const canDiscard = !!draftId || hasContent;
 
   return (
     <PageLayout
@@ -311,6 +666,7 @@ export default function SubmitPage() {
             <ul className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
               <li>• Usá un título claro y específico.</li>
               <li>• Si es una duda, contá qué probaste.</li>
+              <li>• Adjuntá los apuntes en PDF o el enunciado del TP.</li>
               <li>• Mencioná a alguien con <code className="rounded bg-zinc-100 px-1 text-xs dark:bg-zinc-800">@usuario</code>.</li>
               <li>• Agregá etiquetas para que lo encuentren más fácil.</li>
               <li>• Respetá las reglas de la comunidad.</li>
@@ -320,17 +676,24 @@ export default function SubmitPage() {
       }
     >
       <div className="mb-5 flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">Crear post</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">{draftId ? 'Continuar borrador' : 'Crear post'}</h1>
           <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{typeMeta.hint}</p>
         </div>
+        <Button variant="secondary" size="sm" onClick={() => setDraftsOpen(true)} className="shrink-0">
+          <FilePen />
+          Borradores
+          {draftCount > 0 && (
+            <span className="rounded-md bg-zinc-100 px-1.5 text-[11px] font-semibold tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{draftCount}</span>
+          )}
+        </Button>
       </div>
 
       {restored && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 px-3.5 py-2.5 text-sm text-brand-800 dark:border-brand-500/25 dark:bg-brand-500/10 dark:text-brand-200">
-          <span>Recuperamos el borrador que dejaste sin publicar.</span>
-          <button type="button" onClick={discardDraft} className="shrink-0 font-semibold hover:underline">
-            Descartar
+          <span>Recuperamos cambios que no se habían llegado a guardar.</span>
+          <button type="button" onClick={() => setRestored(false)} className="shrink-0 font-semibold hover:underline">
+            Entendido
           </button>
         </div>
       )}
@@ -429,7 +792,8 @@ export default function SubmitPage() {
               maxLength={40000}
               minRows={type === 'TEXT' || type === 'QUESTION' ? 8 : 4}
               invalid={!!errors.body}
-              onSubmit={submit}
+              onSubmit={() => void submit()}
+              onAttachFiles={uploads.add}
               placeholder={
                 type === 'QUESTION'
                   ? 'Contá qué necesitás saber y qué probaste hasta ahora…'
@@ -496,6 +860,21 @@ export default function SubmitPage() {
           )}
 
           <div>
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <p className="text-[13px] font-medium text-zinc-700 dark:text-zinc-300">
+                Archivos adjuntos <span className="font-normal text-zinc-400">(opcional)</span>
+              </p>
+              {uploads.count > 0 && (
+                <span className="text-xs tabular-nums text-zinc-400">
+                  {uploads.count}/{MAX_FILES}
+                </span>
+              )}
+            </div>
+            <AttachmentPicker uploads={uploads} />
+            <FieldError>{errors.attachmentIds}</FieldError>
+          </div>
+
+          <div>
             <p className="mb-2 text-[13px] font-medium text-zinc-700 dark:text-zinc-300">
               Imagen de portada <span className="font-normal text-zinc-400">(opcional)</span>
             </p>
@@ -512,16 +891,164 @@ export default function SubmitPage() {
           </div>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-zinc-100 bg-zinc-50/60 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-end sm:px-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <Link to={community ? `/c/${community.slug}` : '/'} className={buttonVariants({ variant: 'ghost' })}>
-            Cancelar
-          </Link>
-          <Button onClick={submit} loading={create.isPending} size="lg" className="sm:min-w-36">
-            <Send />
-            Publicar
-          </Button>
+        <div className="flex flex-col gap-3 border-t border-zinc-100 bg-zinc-50/60 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <SaveIndicator status={saveStatus} savedAt={savedAt} onRetry={() => void flush()} />
+            {canDiscard && (
+              <button
+                type="button"
+                onClick={() => setDiscardOpen(true)}
+                className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium text-zinc-400 transition-colors hover:text-rose-600 sm:ml-0 dark:hover:text-rose-400"
+              >
+                <Trash className="size-3.5" />
+                Descartar
+              </button>
+            )}
+          </div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <Link to={community ? `/c/${community.slug}` : '/'} className={buttonVariants({ variant: 'ghost' })}>
+              Cancelar
+            </Link>
+            <Button onClick={() => void submit()} loading={create.isPending} disabled={uploads.isUploading} size="lg" className="sm:min-w-36">
+              {uploads.isUploading ? (
+                <>
+                  <Spinner className="size-4" label="Subiendo archivos" />
+                  Subiendo archivos…
+                </>
+              ) : (
+                <>
+                  <Send />
+                  Publicar
+                </>
+              )}
+            </Button>
+          </div>
         </div>
+      </div>
+
+      <DraftsDialog open={draftsOpen} onOpenChange={setDraftsOpen} currentId={draftId} onOpenDraft={onOpenDraft} />
+      <ConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="¿Descartar este borrador?"
+        description={uploads.count > 0 ? 'Se borra lo que escribiste y los archivos que adjuntaste. No se puede deshacer.' : 'Se borra lo que escribiste. No se puede deshacer.'}
+        confirmLabel="Descartar"
+        onConfirm={discard}
+      />
+    </PageLayout>
+  );
+}
+
+/* ---------------- Página ---------------- */
+
+function SubmitSkeleton() {
+  return (
+    <PageLayout>
+      <Skeleton className="mb-2 h-7 w-48" />
+      <Skeleton className="mb-6 h-4 w-72" />
+      <Skeleton className="mb-4 h-11 w-full rounded-xl sm:w-80" />
+      <div className="surface space-y-4 p-5">
+        <Skeleton className="h-12 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
       </div>
     </PageLayout>
   );
+}
+
+/** Carga el borrador (?draft=id) o el respaldo local y arma el estado inicial del editor. */
+function SubmitLoader({ draftId, onDraftCreated, onOpenDraft }: { draftId: number | null; onDraftCreated: (id: number) => void; onOpenDraft: (id: number | null) => void }) {
+  const local = useMemo(readLocalDraft, []);
+  const q = useDraft(draftId);
+  const notFound = q.isError && isApiError(q.error) && (q.error.status === 404 || q.error.status === 403);
+
+  useEffect(() => {
+    if (!notFound) return;
+    toast.error('Ese borrador ya no existe');
+    onOpenDraft(null);
+  }, [notFound, onOpenDraft]);
+
+  const init = useMemo<FormInit | null>(() => {
+    if (draftId == null) {
+      // Sin ?draft: si quedó un respaldo local lo recuperamos (y si tenía id, seguimos ese borrador).
+      return local ? fromLocal(local) : EMPTY_INIT;
+    }
+    if (q.data) {
+      const serverAt = Date.parse(q.data.updatedAt) || 0;
+      if (local?.draftId === draftId && (local.savedAt ?? 0) > serverAt) return { ...fromLocal(local), savedAt: serverAt };
+      return fromDraft(q.data);
+    }
+    if (q.isError && !notFound && local?.draftId === draftId) return fromLocal(local);
+    return null;
+  }, [draftId, q.data, q.isError, notFound, local]);
+
+  // Respaldo local con id → reflejarlo en la URL (sin remontar).
+  const announced = useRef(false);
+  useEffect(() => {
+    if (announced.current || !init || draftId != null || init.draftId == null) return;
+    announced.current = true;
+    onDraftCreated(init.draftId);
+  }, [init, draftId, onDraftCreated]);
+
+  if (init) return <SubmitEditor init={init} onDraftCreated={onDraftCreated} onOpenDraft={onOpenDraft} />;
+  if (q.isError && !notFound)
+    return (
+      <div className="surface">
+        <ErrorState error={q.error} onRetry={() => void q.refetch()} title="No pudimos abrir el borrador" />
+      </div>
+    );
+  return <SubmitSkeleton />;
+}
+
+function parseDraftParam(v: string | null) {
+  const n = Number(v);
+  return v && Number.isInteger(n) && n > 0 ? n : null;
+}
+
+export default function SubmitPage() {
+  useDocumentTitle('Crear post');
+  const [params, setParams] = useSearchParams();
+  const paramId = parseDraftParam(params.get('draft'));
+  // `key` cambia solo cuando el usuario abre otro borrador (no cuando el autoguardado crea uno).
+  const [session, setSession] = useState({ key: 0, draftId: paramId });
+
+  useEffect(() => {
+    if (paramId !== session.draftId) setSession((s) => ({ key: s.key + 1, draftId: paramId }));
+  }, [paramId, session.draftId]);
+
+  const onDraftCreated = useCallback(
+    (id: number) => {
+      setSession((s) => ({ ...s, draftId: id }));
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('draft', String(id));
+          next.delete('community');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  const onOpenDraft = useCallback(
+    (id: number | null) => {
+      if (id == null) clearLocalDraft();
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id == null) next.delete('draft');
+          else next.set('draft', String(id));
+          next.delete('community');
+          return next;
+        },
+        { replace: false },
+      );
+      window.scrollTo({ top: 0 });
+    },
+    [setParams],
+  );
+
+  return <SubmitLoader key={session.key} draftId={session.draftId} onDraftCreated={onDraftCreated} onOpenDraft={onOpenDraft} />;
 }

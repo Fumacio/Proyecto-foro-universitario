@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { excerpt } from './text.js';
 import type {
   AdminUser,
+  AttachmentDto,
   BanDto,
   CommentDto,
   CommentWithPost,
@@ -12,6 +13,7 @@ import type {
   PollDto,
   PostDetail,
   PostListItem,
+  ReactionSummary,
   ReportDto,
   Role,
   TagDto,
@@ -73,6 +75,26 @@ export function toAdminUser(u: AdminUserRow): AdminUser {
     postCount: u._count.posts,
     commentCount: u._count.comments,
     ban: toBan(u.bans[0]),
+  };
+}
+
+// ---------- adjuntos ----------
+
+export type AttachmentRow = Prisma.AttachmentGetPayload<object>;
+
+export const attachmentsInclude = { orderBy: { id: 'asc' as const } };
+
+export function toAttachment(a: AttachmentRow): AttachmentDto {
+  return {
+    id: a.id,
+    filename: a.filename,
+    mimeType: a.mimeType,
+    size: a.size,
+    kind: a.kind,
+    url: `/api/attachments/${a.id}/download`,
+    previewUrl: a.kind === 'IMAGE' || a.kind === 'PDF' ? `/api/attachments/${a.id}/view` : null,
+    downloadCount: a.downloadCount,
+    createdAt: iso(a.createdAt),
   };
 }
 
@@ -140,10 +162,17 @@ export function postInclude(viewerId: number | null) {
       include: { _count: { select: { votes: true } } },
     },
     pollVotes: { where: { userId: v }, select: { optionId: true } },
+    _count: { select: { attachments: true } },
   } satisfies Prisma.PostInclude;
 }
 
 export type PostRow = Prisma.PostGetPayload<{ include: ReturnType<typeof postInclude> }>;
+
+export function postDetailInclude(viewerId: number | null) {
+  return { ...postInclude(viewerId), attachments: attachmentsInclude } satisfies Prisma.PostInclude;
+}
+
+export type PostDetailRow = Prisma.PostGetPayload<{ include: ReturnType<typeof postDetailInclude> }>;
 
 export function toPoll(p: PostRow, now = new Date()): PollDto | null {
   if (p.type !== 'POLL') return null;
@@ -157,7 +186,8 @@ export function toPoll(p: PostRow, now = new Date()): PollDto | null {
   };
 }
 
-export function toPostListItem(p: PostRow): PostListItem {
+/** `reactions` se calcula aparte (groupBy por lote, ver lib/reactions.ts). */
+export function toPostListItem(p: PostRow, reactions: ReactionSummary[] = []): PostListItem {
   return {
     id: p.id,
     type: p.type,
@@ -179,15 +209,22 @@ export function toPostListItem(p: PostRow): PostListItem {
     poll: toPoll(p),
     createdAt: iso(p.createdAt),
     editedAt: isoOrNull(p.editedAt),
+    reactions,
+    attachmentCount: p._count.attachments,
   };
 }
 
-export function toPostDetail(p: PostRow, viewer: { id: number; role: Role } | null | undefined): PostDetail {
+export function toPostDetail(
+  p: PostDetailRow,
+  viewer: { id: number; role: Role } | null | undefined,
+  reactions: ReactionSummary[] = [],
+): PostDetail {
   return {
-    ...toPostListItem(p),
+    ...toPostListItem(p, reactions),
     body: p.body,
     canEdit: !!viewer && p.authorId === viewer.id,
     canModerate: !!viewer && isModRole(viewer.role),
+    attachments: p.attachments.map(toAttachment),
   };
 }
 
@@ -197,12 +234,13 @@ export function commentInclude(viewerId: number | null) {
   return {
     author: { select: userSummarySelect },
     votes: { where: { userId: viewerId ?? NO_VIEWER }, select: { value: true } },
+    attachments: attachmentsInclude,
   } satisfies Prisma.CommentInclude;
 }
 
 export type CommentRow = Prisma.CommentGetPayload<{ include: ReturnType<typeof commentInclude> }>;
 
-export function toComment(c: CommentRow, acceptedCommentId: number | null): CommentDto {
+export function toComment(c: CommentRow, acceptedCommentId: number | null, reactions: ReactionSummary[] = []): CommentDto {
   return {
     id: c.id,
     postId: c.postId,
@@ -215,6 +253,8 @@ export function toComment(c: CommentRow, acceptedCommentId: number | null): Comm
     isAccepted: !c.isDeleted && acceptedCommentId === c.id,
     createdAt: iso(c.createdAt),
     editedAt: isoOrNull(c.editedAt),
+    reactions: c.isDeleted ? [] : reactions,
+    attachments: c.isDeleted ? [] : c.attachments.map(toAttachment),
     replies: [],
   };
 }
@@ -228,9 +268,14 @@ const comparators: Record<CommentSort, (a: CommentDto, b: CommentDto) => number>
 };
 
 /** Arma el árbol completo; el aceptado va primero entre las raíces. */
-export function buildCommentTree(rows: CommentRow[], acceptedCommentId: number | null, sort: CommentSort): CommentDto[] {
+export function buildCommentTree(
+  rows: CommentRow[],
+  acceptedCommentId: number | null,
+  sort: CommentSort,
+  reactions: Map<number, ReactionSummary[]> = new Map(),
+): CommentDto[] {
   const byId = new Map<number, CommentDto>();
-  for (const row of rows) byId.set(row.id, toComment(row, acceptedCommentId));
+  for (const row of rows) byId.set(row.id, toComment(row, acceptedCommentId, reactions.get(row.id)));
   const roots: CommentDto[] = [];
   for (const node of byId.values()) {
     const parent = node.parentId !== null ? byId.get(node.parentId) : undefined;
@@ -256,8 +301,8 @@ export function commentWithPostInclude(viewerId: number | null) {
 
 export type CommentWithPostRow = Prisma.CommentGetPayload<{ include: ReturnType<typeof commentWithPostInclude> }>;
 
-export function toCommentWithPost(c: CommentWithPostRow): CommentWithPost {
-  const { replies: _replies, ...rest } = toComment(c, c.post.acceptedCommentId);
+export function toCommentWithPost(c: CommentWithPostRow, reactions: ReactionSummary[] = []): CommentWithPost {
+  const { replies: _replies, ...rest } = toComment(c, c.post.acceptedCommentId, reactions);
   return { ...rest, post: { id: c.post.id, title: c.post.title, community: toCommunityRef(c.post.community) } };
 }
 
@@ -286,7 +331,10 @@ export function toNotification(n: NotificationRow): NotificationDto {
 
 // ---------- mensajes ----------
 
-export const messageInclude = { sender: { select: userSummarySelect } } satisfies Prisma.MessageInclude;
+export const messageInclude = {
+  sender: { select: userSummarySelect },
+  attachments: attachmentsInclude,
+} satisfies Prisma.MessageInclude;
 
 export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
 
@@ -297,6 +345,7 @@ export function toMessage(m: MessageRow): MessageDto {
     sender: toUserSummary(m.sender),
     body: m.body,
     createdAt: iso(m.createdAt),
+    attachments: m.attachments.map(toAttachment),
   };
 }
 

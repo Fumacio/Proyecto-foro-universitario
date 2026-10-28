@@ -1,7 +1,7 @@
 import type { User } from '@prisma/client';
 import { prisma } from './prisma.js';
 import { activeBanWhere, iso, toBan, toUserSummary } from './serializers.js';
-import type { Me } from './types.js';
+import type { Me, Preferences } from './types.js';
 import { countUnreadMessages, countUnreadNotifications } from './unread.js';
 
 export function getActiveBan(userId: number) {
@@ -18,12 +18,23 @@ export async function getKarma(userId: number): Promise<{ post: number; comment:
   return { post, comment, total: post + comment };
 }
 
+export function toPreferences(u: Pick<User, keyof Preferences>): Preferences {
+  return {
+    emailReplies: u.emailReplies,
+    emailMentions: u.emailMentions,
+    emailMessages: u.emailMessages,
+    emailFollows: u.emailFollows,
+    emailReactions: u.emailReactions,
+  };
+}
+
 export async function buildMe(user: User): Promise<Me> {
-  const [karma, unreadNotifications, unreadMessages, ban] = await Promise.all([
+  const [karma, unreadNotifications, unreadMessages, ban, draftCount] = await Promise.all([
     getKarma(user.id),
     countUnreadNotifications(user.id),
     countUnreadMessages(user.id),
     getActiveBan(user.id),
+    prisma.draft.count({ where: { userId: user.id } }),
   ]);
   return {
     ...toUserSummary(user),
@@ -35,6 +46,10 @@ export async function buildMe(user: User): Promise<Me> {
     unreadNotifications,
     unreadMessages,
     ban: toBan(ban),
+    hasPassword: user.passwordHash !== null,
+    googleLinked: user.googleId !== null,
+    preferences: toPreferences(user),
+    draftCount,
   };
 }
 

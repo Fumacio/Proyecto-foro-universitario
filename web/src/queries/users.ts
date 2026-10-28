@@ -107,7 +107,8 @@ export function useRemoveAvatar() {
 export function useDeleteAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (password: string) => api.del('/users/me', { password }),
+    /** Con contraseña, o (cuentas de Google sin contraseña) escribiendo el usuario. */
+    mutationFn: (input: { password: string } | { confirmUsername: string }) => api.del('/users/me', input),
     meta: { skipGlobalError: true },
     onSuccess: () => resetSessionData(qc, null),
   });

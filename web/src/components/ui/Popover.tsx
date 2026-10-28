@@ -33,6 +33,9 @@ export function PopoverContent({
 
 export const TooltipProvider = RT.Provider;
 
+export const tooltipContentClass =
+  'z-[60] max-w-xs rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg data-[state=delayed-open]:animate-fade-in data-[state=instant-open]:animate-fade-in dark:bg-zinc-100 dark:text-zinc-900';
+
 export function Tooltip({
   content,
   children,
@@ -53,7 +56,7 @@ export function Tooltip({
           side={side}
           sideOffset={6}
           collisionPadding={8}
-          className="z-[60] max-w-xs rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg data-[state=delayed-open]:animate-fade-in dark:bg-zinc-100 dark:text-zinc-900"
+          className={tooltipContentClass}
         >
           {content}
         </RT.Content>

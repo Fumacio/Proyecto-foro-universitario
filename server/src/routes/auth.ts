@@ -1,8 +1,11 @@
 import crypto from 'node:crypto';
-import { Router } from 'express';
+import { Router, type CookieOptions } from 'express';
 import { z } from 'zod';
+import { env, googleConfig } from '../env.js';
 import { clearAuthCookie, hashPassword, setAuthCookie, verifyPassword } from '../lib/auth.js';
-import { conflict, HttpError } from '../lib/errors.js';
+import { queueWelcomeEmail } from '../lib/emailNotify.js';
+import { conflict, HttpError, notFound } from '../lib/errors.js';
+import { fetchGoogleProfile, googleAuthUrl, loginWithGoogleProfile, safeNext } from '../lib/google.js';
 import { sendPasswordResetEmail } from '../lib/mailer.js';
 import { prisma } from '../lib/prisma.js';
 import { buildMe } from '../lib/users.js';
@@ -72,6 +75,7 @@ router.post('/register', authLimiter, async (req, res) => {
       displayName: data.displayName,
     },
   });
+  queueWelcomeEmail(user);
   setAuthCookie(res, user);
   res.status(201).json({ user: await buildMe(user) });
 });
@@ -86,6 +90,9 @@ router.post('/login', authLimiter, async (req, res) => {
   const key = login.toLowerCase();
   const user = await prisma.user.findFirst({ where: { OR: [{ email: key }, { usernameKey: key }] } });
   const ok = await verifyPassword(password, user?.passwordHash);
+  if (user && user.passwordHash === null) {
+    throw new HttpError(401, 'UNAUTHORIZED', 'Esta cuenta usa Google para iniciar sesión');
+  }
   if (!user || !ok) throw new HttpError(401, 'UNAUTHORIZED', 'Usuario o contraseña incorrectos');
   setAuthCookie(res, user);
   res.json({ user: await buildMe(user) });
@@ -142,17 +149,23 @@ router.post('/reset-password', async (req, res) => {
 });
 
 const changePasswordSchema = z.object({
-  currentPassword: z.string({ error: 'Ingresá tu contraseña actual' }).min(1, 'Ingresá tu contraseña actual').max(200),
+  // Opcional solo para cuentas sin contraseña (creadas con Google): así ponen una.
+  currentPassword: z.union([z.string().max(200), z.null()]).optional(),
   newPassword: passwordSchema,
 });
 
 router.post('/change-password', requireAuth, async (req, res) => {
   const user = authUser(req);
   const { currentPassword, newPassword } = parse(changePasswordSchema, req.body);
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
-    throw new HttpError(400, 'VALIDATION', 'La contraseña actual es incorrecta', {
-      currentPassword: 'La contraseña actual es incorrecta',
-    });
+  if (user.passwordHash !== null) {
+    if (!currentPassword) {
+      throw new HttpError(400, 'VALIDATION', 'Ingresá tu contraseña actual', { currentPassword: 'Ingresá tu contraseña actual' });
+    }
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw new HttpError(400, 'VALIDATION', 'La contraseña actual es incorrecta', {
+        currentPassword: 'La contraseña actual es incorrecta',
+      });
+    }
   }
   const updated = await prisma.user.update({
     where: { id: user.id },
@@ -160,6 +173,64 @@ router.post('/change-password', requireAuth, async (req, res) => {
   });
   setAuthCookie(res, updated);
   res.json({ ok: true });
+});
+
+// ---------- Login con Google ----------
+
+router.get('/providers', (_req, res) => {
+  res.json({ google: googleConfig().enabled });
+});
+
+const GOOGLE_STATE_COOKIE = 'g_oauth';
+const stateCookie: CookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: env.COOKIE_SECURE,
+  path: '/api/auth/google',
+};
+
+function sameString(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+// GET /auth/google?next=/ruta → 302 a Google
+router.get('/google', (req, res) => {
+  if (!googleConfig().enabled) throw notFound('El login con Google no está configurado');
+  const state = crypto.randomBytes(24).toString('hex');
+  res.cookie(GOOGLE_STATE_COOKIE, { s: state, n: safeNext(req.query.next) }, { ...stateCookie, maxAge: 10 * 60 * 1000 });
+  res.redirect(302, googleAuthUrl(state));
+});
+
+// GET /auth/google/callback?code&state
+router.get('/google/callback', async (req, res) => {
+  const fail = () => res.redirect(302, `${env.FRONTEND_URL}/login?error=google`);
+  const saved: unknown = req.cookies?.[GOOGLE_STATE_COOKIE];
+  res.clearCookie(GOOGLE_STATE_COOKIE, stateCookie);
+  const { code, state } = req.query;
+  const savedState = typeof saved === 'object' && saved !== null ? (saved as { s?: unknown; n?: unknown }) : null;
+  if (
+    !googleConfig().enabled ||
+    typeof code !== 'string' ||
+    code === '' ||
+    typeof state !== 'string' ||
+    typeof savedState?.s !== 'string' ||
+    !sameString(savedState.s, state)
+  ) {
+    fail();
+    return;
+  }
+  try {
+    const profile = await fetchGoogleProfile(code);
+    const { user, created } = await loginWithGoogleProfile(profile);
+    if (created) queueWelcomeEmail(user);
+    setAuthCookie(res, user);
+    res.redirect(302, `${env.FRONTEND_URL}${safeNext(savedState.n)}`);
+  } catch (err) {
+    if (!env.isTest) console.warn('[auth] el login con Google falló:', err instanceof Error ? err.message : err);
+    fail();
+  }
 });
 
 export default router;

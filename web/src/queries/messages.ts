@@ -80,7 +80,7 @@ export function appendMessage(qc: QueryClient, msg: Message, opts?: { incrementU
     found = true;
     const updated: Conversation = {
       ...conv,
-      lastMessage: { body: msg.body, createdAt: msg.createdAt, senderId: msg.sender.id },
+      lastMessage: { body: messagePreview(msg), createdAt: msg.createdAt, senderId: msg.sender.id },
       updatedAt: msg.createdAt,
       unread: opts?.incrementUnread ? conv.unread + 1 : conv.unread,
     };
@@ -92,10 +92,22 @@ export function appendMessage(qc: QueryClient, msg: Message, opts?: { incrementU
 export function useSendMessage(conversationId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: string) =>
-      api.post<{ message: Message }>(`/conversations/${conversationId}/messages`, { body }),
+    mutationFn: ({ body, attachmentIds }: { body: string; attachmentIds?: number[] }) =>
+      api.post<{ message: Message }>(`/conversations/${conversationId}/messages`, {
+        body,
+        ...(attachmentIds?.length ? { attachmentIds } : {}),
+      }),
     onSuccess: ({ message }) => appendMessage(qc, message),
   });
+}
+
+/** Texto para la vista previa de un mensaje (los que son solo adjuntos vienen con body ""). */
+export function messagePreview(m: { body: string; attachments?: { filename: string; kind: string }[] }) {
+  if (m.body.trim()) return m.body;
+  const files = m.attachments ?? [];
+  if (files.length === 0) return '📎 Archivo adjunto';
+  if (files.length === 1) return `${files[0].kind === 'IMAGE' ? '🖼️' : '📎'} ${files[0].filename}`;
+  return `📎 ${files.length} archivos`;
 }
 
 export function useMarkConversationRead() {

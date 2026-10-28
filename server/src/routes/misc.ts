@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { serializePosts } from '../lib/posts.js';
 import { prisma } from '../lib/prisma.js';
-import { communityRefSelect, postInclude, toCommunityRef, toPostListItem, toUserSummary, userSummarySelect } from '../lib/serializers.js';
+import { communityRefSelect, postInclude, toCommunityRef, toUserSummary, userSummarySelect } from '../lib/serializers.js';
 import { imageUpload, saveImage } from '../lib/upload.js';
 import { parse } from '../lib/validate.js';
 import { requireWriter } from '../middleware/auth.js';
@@ -50,7 +51,7 @@ router.get('/search', async (req, res) => {
     (a, b) => Number(b.title.toLowerCase().includes(needle)) - Number(a.title.toLowerCase().includes(needle)),
   );
   res.json({
-    posts: ranked.slice(0, 8).map(toPostListItem),
+    posts: await serializePosts(ranked.slice(0, 8), req.user?.id ?? null),
     users: users.map(toUserSummary),
     communities: communities.map(toCommunityRef),
   });

@@ -1,6 +1,7 @@
-import { Bookmark, LogOut, Monitor, Moon, Settings, ShieldCheck, Sun, User } from 'lucide-react';
+import { Bookmark, Download, FilePen, LogOut, Monitor, Moon, Settings, ShieldCheck, Sun, User } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useInstallApp } from '@/lib/pwa';
 import { useTheme, type ThemePref } from '@/lib/store';
 import type { Me } from '@/lib/types';
 import { cn, displayName, formatCount, isStaff } from '@/lib/utils';
@@ -54,6 +55,8 @@ export function UserMenu({ me }: { me: Me }) {
   const navigate = useNavigate();
   const logout = useLogout();
   const { theme, setTheme } = useTheme();
+  const installApp = useInstallApp();
+  const drafts = me.draftCount ?? 0;
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -85,12 +88,23 @@ export function UserMenu({ me }: { me: Me }) {
         <MenuItem icon={<Bookmark />} onSelect={() => navigate('/saved')}>
           Guardados
         </MenuItem>
+        <MenuItem icon={<FilePen />} onSelect={() => navigate('/drafts')}>
+          Borradores
+          {drafts > 0 && (
+            <span className="ml-auto rounded-md bg-zinc-100 px-1.5 text-[11px] font-semibold tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{drafts}</span>
+          )}
+        </MenuItem>
         <MenuItem icon={<Settings />} onSelect={() => navigate('/settings')}>
           Configuración
         </MenuItem>
         {isStaff(me.role) && (
           <MenuItem icon={<ShieldCheck />} onSelect={() => navigate('/mod')}>
             Moderación
+          </MenuItem>
+        )}
+        {installApp.available && (
+          <MenuItem icon={<Download />} onSelect={() => void installApp.install()}>
+            Instalar app
           </MenuItem>
         )}
         <MenuSeparator />

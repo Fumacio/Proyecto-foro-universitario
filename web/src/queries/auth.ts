@@ -102,10 +102,32 @@ export function useResetPassword() {
   });
 }
 
+/** `currentPassword` se omite solo en cuentas sin contraseña (creadas con Google). */
 export function useChangePassword() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
+    mutationFn: (input: { currentPassword?: string; newPassword: string }) =>
       api.post<{ ok: true }>('/auth/change-password', input),
     meta: { skipGlobalError: true },
+    onSuccess: () => {
+      qc.setQueryData<{ user: Me | null }>(meKey, (d) => (d?.user ? { user: { ...d.user, hasPassword: true } } : d));
+    },
   });
+}
+
+/* ---------------- Login con Google (v2.1) ---------------- */
+
+export function useAuthProviders() {
+  return useQuery({
+    queryKey: ['auth-providers'],
+    queryFn: ({ signal }) => api.get<{ google: boolean }>('/auth/providers', undefined, signal),
+    staleTime: 10 * 60_000,
+    retry: false,
+    select: (d) => ({ google: !!d?.google }),
+  });
+}
+
+/** URL (navegación completa, no fetch) que arranca el flujo OAuth y vuelve a `next`. */
+export function googleAuthUrl(next: string) {
+  return `/api/auth/google?next=${encodeURIComponent(next || '/')}`;
 }

@@ -10,6 +10,7 @@ import { useCommunities, useTags } from '@/queries/communities';
 import { usePublicStats } from '@/queries/misc';
 import { CommunityIcon, LogoMark, TagChip } from '../common';
 import { JoinButton } from '../communities/JoinButton';
+import { InstallAppCard } from '../pwa/InstallApp';
 import { buttonVariants } from '../ui/Button';
 import { Card, CardHeader, Skeleton } from '../ui/misc';
 
@@ -154,6 +155,7 @@ export function HomeRail() {
   return (
     <>
       <WelcomeCard />
+      <InstallAppCard />
       <PopularCommunities />
       <TrendingTags />
       <ForumStats />

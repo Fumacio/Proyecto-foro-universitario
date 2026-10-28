@@ -1,10 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import {
+  attachmentIdsSchema,
+  deleteAttachmentsWhere,
+  linkAttachments,
+  MAX_ATTACHMENTS,
+  removeStoredFiles,
+} from '../lib/attachments.js';
 import { forbidden, HttpError, locked, notFound } from '../lib/errors.js';
 import { notify, notifyMentions } from '../lib/notify.js';
 import { refreshCommentCount, refreshCommentScore } from '../lib/posts.js';
 import { prisma } from '../lib/prisma.js';
-import { buildCommentTree, commentInclude, toComment } from '../lib/serializers.js';
+import { commentReactionSummaries, normalizeEmoji } from '../lib/reactions.js';
+import { buildCommentTree, commentInclude, toComment, toUserSummary, userSummarySelect } from '../lib/serializers.js';
 import type { CommentDto } from '../lib/types.js';
 import { idSchema, parse, parseId } from '../lib/validate.js';
 import { authUser, isMod, requireAuth, requireWriter } from '../middleware/auth.js';
@@ -36,13 +44,18 @@ router.get('/posts/:id/comments', async (req, res) => {
   const { sort } = parse(z.object({ sort: z.enum(['best', 'new', 'old']).default('best') }), req.query);
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { acceptedCommentId: true } });
   if (!post) throw notFound(POST_NOT_FOUND);
+  const viewerId = req.user?.id ?? null;
   const rows = await prisma.comment.findMany({
     where: { postId },
-    include: commentInclude(req.user?.id ?? null),
+    include: commentInclude(viewerId),
     orderBy: { id: 'asc' },
   });
+  const reactions = await commentReactionSummaries(
+    rows.filter((c) => !c.isDeleted).map((c) => c.id),
+    viewerId,
+  );
   res.json({
-    items: buildCommentTree(rows, post.acceptedCommentId, sort),
+    items: buildCommentTree(rows, post.acceptedCommentId, sort, reactions),
     total: rows.reduce((n, c) => n + (c.isDeleted ? 0 : 1), 0),
   });
 });
@@ -50,13 +63,14 @@ router.get('/posts/:id/comments', async (req, res) => {
 const createSchema = z.object({
   body: commentBody,
   parentId: z.union([idSchema, z.null()]).optional(),
+  attachmentIds: attachmentIdsSchema(MAX_ATTACHMENTS.comment).optional(),
 });
 
 // POST /posts/:id/comments
 router.post('/posts/:id/comments', requireWriter, commentLimiter, async (req, res) => {
   const user = authUser(req);
   const postId = parseId(req.params.id, POST_NOT_FOUND);
-  const { body, parentId } = parse(createSchema, req.body);
+  const { body, parentId, attachmentIds } = parse(createSchema, req.body);
   const post = await prisma.post.findUnique({
     where: { id: postId },
     select: { id: true, authorId: true, isLocked: true, acceptedCommentId: true },
@@ -79,10 +93,11 @@ router.post('/posts/:id/comments', requireWriter, commentLimiter, async (req, re
   const comment = await prisma.$transaction(async (tx) => {
     const created = await tx.comment.create({
       data: { postId, parentId: parentId ?? null, authorId: user.id, body },
-      include: commentInclude(user.id),
+      select: { id: true },
     });
+    if (attachmentIds?.length) await linkAttachments(tx, { ids: attachmentIds, userId: user.id, target: { commentId: created.id } });
     await refreshCommentCount(tx, postId);
-    return created;
+    return tx.comment.findUniqueOrThrow({ where: { id: created.id }, include: commentInclude(user.id) });
   });
 
   // Notificaciones: respuesta directa + menciones (sin duplicar a quien ya recibe la respuesta).
@@ -111,7 +126,10 @@ router.post('/posts/:id/comments', requireWriter, commentLimiter, async (req, re
 router.patch('/comments/:id', requireWriter, async (req, res) => {
   const user = authUser(req);
   const id = parseId(req.params.id, COMMENT_NOT_FOUND);
-  const { body } = parse(z.object({ body: commentBody }), req.body);
+  const { body, attachmentIds } = parse(
+    z.object({ body: commentBody, attachmentIds: attachmentIdsSchema(MAX_ATTACHMENTS.comment).optional() }),
+    req.body,
+  );
   const current = await prisma.comment.findUnique({
     where: { id },
     select: { authorId: true, isDeleted: true, body: true, postId: true, post: { select: { isLocked: true, acceptedCommentId: true } } },
@@ -120,7 +138,12 @@ router.patch('/comments/:id', requireWriter, async (req, res) => {
   if (current.authorId !== user.id) throw forbidden('Solo el autor puede editar este comentario');
   if (current.post.isLocked && !isMod(user)) throw locked('Este post está cerrado: no se pueden editar comentarios');
 
-  await prisma.comment.update({ where: { id }, data: { body, editedAt: new Date() } });
+  const removed = await prisma.$transaction(async (tx) => {
+    await tx.comment.update({ where: { id }, data: { body, editedAt: new Date() } });
+    if (attachmentIds === undefined) return [];
+    return linkAttachments(tx, { ids: attachmentIds, userId: user.id, target: { commentId: id }, replace: true });
+  });
+  await removeStoredFiles(removed);
   await notifyMentions({ text: body, previousText: current.body, actorId: user.id, postId: current.postId, commentId: id });
 
   // Devolvemos el nodo con su subárbol completo de respuestas.
@@ -129,7 +152,11 @@ router.patch('/comments/:id', requireWriter, async (req, res) => {
     include: commentInclude(user.id),
     orderBy: { id: 'asc' },
   });
-  const node = findInTree(buildCommentTree(rows, current.post.acceptedCommentId, 'best'), id);
+  const reactions = await commentReactionSummaries(
+    rows.filter((c) => !c.isDeleted).map((c) => c.id),
+    user.id,
+  );
+  const node = findInTree(buildCommentTree(rows, current.post.acceptedCommentId, 'best', reactions), id);
   res.json({ comment: node });
 });
 
@@ -149,8 +176,9 @@ router.delete('/comments/:id', requireAuth, async (req, res) => {
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
+  const files = await prisma.$transaction(async (tx) => {
     await tx.comment.update({ where: { id }, data: { isDeleted: true } });
+    const removedFiles = await deleteAttachmentsWhere(tx, { commentId: id });
     if (comment.post.acceptedCommentId === id) {
       await tx.post.update({ where: { id: comment.postId }, data: { acceptedCommentId: null } });
     }
@@ -159,7 +187,9 @@ router.delete('/comments/:id', requireAuth, async (req, res) => {
       data: { status: 'RESOLVED', resolvedById: user.id, resolvedAt: new Date() },
     });
     await refreshCommentCount(tx, comment.postId);
+    return removedFiles;
   });
+  await removeStoredFiles(files);
 
   if (!isAuthor && comment.authorId) {
     await notify({
@@ -197,6 +227,78 @@ router.post('/comments/:id/vote', requireWriter, voteLimiter, async (req, res) =
     return refreshCommentScore(tx, id);
   });
   res.json({ score, myVote: value });
+});
+
+// ---------- reacciones ----------
+
+const reactionSchema = z.object({
+  emoji: z.unknown().transform((v, ctx) => {
+    const emoji = normalizeEmoji(v);
+    if (!emoji) {
+      ctx.addIssue({ code: 'custom', message: 'Esa reacción no está permitida' });
+      return z.NEVER;
+    }
+    return emoji;
+  }),
+});
+
+// POST /comments/:id/reactions  (toggle)
+router.post('/comments/:id/reactions', requireWriter, voteLimiter, async (req, res) => {
+  const user = authUser(req);
+  const id = parseId(req.params.id, COMMENT_NOT_FOUND);
+  const { emoji } = parse(reactionSchema, req.body);
+  const comment = await prisma.comment.findUnique({ where: { id }, select: { isDeleted: true, authorId: true, postId: true } });
+  if (!comment || comment.isDeleted) throw notFound(COMMENT_NOT_FOUND);
+
+  const where = { userId: user.id, commentId: id, emoji };
+  const removed = await prisma.commentReaction.deleteMany({ where });
+  let added = false;
+  if (removed.count === 0) {
+    added = await prisma.commentReaction
+      .create({ data: where })
+      .then(() => true)
+      .catch((err: unknown) => {
+        if ((err as { code?: string }).code === 'P2002') return false;
+        throw err;
+      });
+  }
+  if (added && comment.authorId && comment.authorId !== user.id) {
+    const already = await prisma.notification.findFirst({
+      where: { userId: comment.authorId, actorId: user.id, type: 'REACTION', commentId: id },
+      select: { id: true },
+    });
+    if (!already) {
+      await notify({ userId: comment.authorId, type: 'REACTION', actorId: user.id, postId: comment.postId, commentId: id, message: emoji });
+    }
+  }
+  const reactions = (await commentReactionSummaries([id], user.id)).get(id) ?? [];
+  res.json({ reactions });
+});
+
+// GET /comments/:id/reactions/users?emoji=
+router.get('/comments/:id/reactions/users', async (req, res) => {
+  const id = parseId(req.params.id, COMMENT_NOT_FOUND);
+  const raw = req.query.emoji;
+  let emoji: string | undefined;
+  if (raw !== undefined && raw !== '') {
+    const normalized = normalizeEmoji(raw);
+    if (!normalized) throw new HttpError(400, 'VALIDATION', 'Esa reacción no está permitida', { emoji: 'Esa reacción no está permitida' });
+    emoji = normalized;
+  }
+  const comment = await prisma.comment.findUnique({ where: { id }, select: { isDeleted: true } });
+  if (!comment || comment.isDeleted) throw notFound(COMMENT_NOT_FOUND);
+  const rows = await prisma.commentReaction.findMany({
+    where: { commentId: id, ...(emoji ? { emoji } : {}) },
+    orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
+    take: 200,
+    select: { user: { select: userSummarySelect } },
+  });
+  const seen = new Set<number>();
+  const items = rows
+    .filter((r) => !seen.has(r.user.id) && seen.add(r.user.id))
+    .slice(0, 50)
+    .map((r) => toUserSummary(r.user));
+  res.json({ items });
 });
 
 export default router;

@@ -58,7 +58,19 @@ export async function saveImage(file: Express.Multer.File | undefined): Promise<
   return `/uploads/${name}`;
 }
 
+/** Guarda una imagen ya descargada (p. ej. la foto de Google). null si no es una imagen válida. */
+export async function saveImageBuffer(buf: Buffer): Promise<string | null> {
+  if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) return null;
+  const kind = detectImageKind(buf);
+  if (!kind) return null;
+  const name = `${crypto.randomBytes(16).toString('hex')}.${kind}`;
+  await fs.writeFile(path.join(env.UPLOAD_DIR, name), buf, { flag: 'wx' });
+  return `/uploads/${name}`;
+}
+
 const UPLOAD_URL_RE = /^\/uploads\/[A-Za-z0-9_-]+\.(?:png|jpg|jpeg|webp|gif)$/;
+/** Nombres que sirve el estático público /uploads (solo imágenes en la raíz, nunca files/). */
+export const PUBLIC_UPLOAD_PATH_RE = /^\/[A-Za-z0-9_-]+\.(?:png|jpg|jpeg|webp|gif)$/;
 
 export function isUploadUrl(url: string): boolean {
   return UPLOAD_URL_RE.test(url);

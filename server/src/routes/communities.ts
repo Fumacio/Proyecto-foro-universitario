@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { removeStoredFiles, storedNamesWhere } from '../lib/attachments.js';
 import { conflict, notFound, unauthorized } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 import { communityInclude, toCommunity } from '../lib/serializers.js';
@@ -98,7 +99,12 @@ router.patch('/:slug', requireAdmin, async (req, res) => {
 
 router.delete('/:slug', requireAdmin, async (req, res) => {
   const current = await getCommunityOr404(String(req.params.slug), null);
+  // Los posts (y sus comentarios) se van en cascada: borramos también sus archivos.
+  const files = await storedNamesWhere({
+    OR: [{ post: { communityId: current.id } }, { comment: { post: { communityId: current.id } } }],
+  });
   await prisma.community.delete({ where: { id: current.id } });
+  await removeStoredFiles(files);
   res.status(204).end();
 });
 

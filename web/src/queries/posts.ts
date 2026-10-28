@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { findPost, patchPost, removePostFromCaches } from '@/lib/cache';
+import { removeDraftFromCache } from './drafts';
 import type {
   CreatePostInput,
   Paginated,
@@ -23,6 +24,7 @@ export interface PostFilters {
   type?: PostType;
   unanswered?: boolean;
   q?: string;
+  hasAttachments?: boolean; // v2.1: feed "Con archivos"
 }
 
 const PAGE_SIZE = 20;
@@ -46,6 +48,7 @@ export function usePostsFeed(filters: PostFilters, opts?: { enabled?: boolean })
           author: filters.author,
           type: filters.type,
           unanswered: filters.unanswered ? 'true' : undefined,
+          hasAttachments: filters.hasAttachments ? 'true' : undefined,
           q: filters.q,
           page: pageParam,
           limit: PAGE_SIZE,
@@ -97,10 +100,11 @@ export function useCreatePost() {
   return useMutation({
     mutationFn: (input: CreatePostInput) => api.post<{ post: PostDetail }>('/posts', input),
     meta: { inlineValidation: true },
-    onSuccess: ({ post }) => {
+    onSuccess: ({ post }, input) => {
       qc.setQueryData(['post', post.id], { post });
       qc.invalidateQueries({ queryKey: ['feed'] });
       qc.invalidateQueries({ queryKey: ['community', post.community.slug] });
+      if (input.draftId) removeDraftFromCache(qc, input.draftId);
     },
   });
 }
@@ -118,6 +122,7 @@ export function useUpdatePost(id: number) {
         tags: post.tags,
         imageUrl: post.imageUrl,
         editedAt: post.editedAt,
+        attachmentCount: post.attachmentCount ?? post.attachments?.length ?? 0,
       });
     },
   });
