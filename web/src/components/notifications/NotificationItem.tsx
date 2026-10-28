@@ -1,4 +1,4 @@
-import { AtSign, CircleCheckBig, MessageSquare, Reply, ShieldAlert, UserPlus, type LucideIcon } from 'lucide-react';
+import { AtSign, CircleCheckBig, FaceSlightlySmilingPlus, MessageSquare, Reply, ShieldAlert, UserPlus, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { timeAgo, fullDate } from '@/lib/time';
@@ -13,7 +13,11 @@ const TYPE_META: Record<NotificationType, { icon: LucideIcon; className: string 
   FOLLOW: { icon: UserPlus, className: 'bg-pink-500' },
   ANSWER_ACCEPTED: { icon: CircleCheckBig, className: 'bg-emerald-500' },
   MOD: { icon: ShieldAlert, className: 'bg-amber-500' },
+  REACTION: { icon: FaceSlightlySmilingPlus, className: 'bg-amber-400' },
 };
+
+/** Emoji de una notificación REACTION (`message` = el emoji). */
+const reactionEmoji = (n: Notification) => (n.message?.trim() || '👍').slice(0, 8);
 
 export function notificationTarget(n: Notification): string {
   if (n.type === 'FOLLOW' && n.actor) return `/u/${n.actor.username}`;
@@ -38,6 +42,13 @@ export function notificationText(n: Notification): ReactNode {
       return <>{who} marcó tu comentario como la respuesta{title && <> en {title}</>}</>;
     case 'MOD':
       return <>{n.message ?? 'Aviso del equipo de moderación'}{title && <> · {title}</>}</>;
+    case 'REACTION':
+      return (
+        <>
+          {who} reaccionó <span className="text-[1.1em] leading-none">{reactionEmoji(n)}</span> a tu {n.comment ? 'comentario' : 'post'}
+          {title && <> {n.comment ? 'en ' : ''}{title}</>}
+        </>
+      );
     default:
       return n.message ?? 'Nueva notificación';
   }
@@ -59,6 +70,8 @@ export function notificationPlainText(n: Notification): string {
       return `${who} aceptó tu respuesta`;
     case 'MOD':
       return n.message ?? 'Aviso del equipo de moderación';
+    case 'REACTION':
+      return `${who} reaccionó ${reactionEmoji(n)} a tu ${n.comment ? `comentario${n.post ? ` en${t}` : ''}` : `post${t}`}`;
     default:
       return n.message ?? 'Nueva notificación';
   }
@@ -76,10 +89,16 @@ export function NotificationIcon({ n, size = 'lg' }: { n: Notification; size?: '
           <ShieldAlert className="size-5" />
         </span>
       )}
-      {n.type !== 'MOD' && (
-        <span className={cn('absolute -bottom-0.5 -right-0.5 grid size-[18px] place-items-center rounded-full text-white ring-2 ring-white dark:ring-zinc-900', meta.className)}>
-          <Icon className="size-2.5" strokeWidth={2.75} />
+      {n.type === 'REACTION' ? (
+        <span className="absolute -bottom-1 -right-1 grid size-[20px] place-items-center rounded-full bg-white text-[12px] leading-none shadow-sm ring-2 ring-white dark:bg-zinc-800 dark:ring-zinc-900" aria-hidden>
+          {reactionEmoji(n)}
         </span>
+      ) : (
+        n.type !== 'MOD' && (
+          <span className={cn('absolute -bottom-0.5 -right-0.5 grid size-[18px] place-items-center rounded-full text-white ring-2 ring-white dark:ring-zinc-900', meta.className)}>
+            <Icon className="size-2.5" strokeWidth={2.75} />
+          </span>
+        )
       )}
     </span>
   );

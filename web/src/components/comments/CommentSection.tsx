@@ -13,24 +13,29 @@ import {
   Reply,
   Trash,
 } from 'lucide-react';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { useMediaQuery } from '@/hooks';
 import { isApiError } from '@/lib/api';
+import { ATTACHMENT_LIMITS } from '@/lib/attachments';
 import { countComments, findComment } from '@/lib/cache';
 import { loginPath } from '@/lib/navigation';
-import type { Comment, CommentSort, Me, PostDetail } from '@/lib/types';
+import type { Attachment, Comment, CommentSort, Me, PostDetail } from '@/lib/types';
 import { cn, displayName, plural, postPath } from '@/lib/utils';
 import { useMe, useRequireUser } from '@/queries/auth';
 import { useComments, useCreateComment, useDeleteComment, useEditComment, useVoteComment } from '@/queries/comments';
 import { useAcceptAnswer } from '@/queries/posts';
+import { AttachmentList } from '../attachments/AttachmentList';
+import { AttachButton, FileDropTarget, UploadList } from '../attachments/AttachmentPicker';
+import { sameIds, useAttachmentUploads } from '../attachments/useAttachmentUploads';
 import { TimeAgo, UserLink } from '../common';
 import { Markdown } from '../markdown/Markdown';
 import { MarkdownEditor } from '../markdown/MarkdownEditor';
 import { ReportDialog } from '../posts/ReportDialog';
 import { shareLink } from '../posts/usePostActions';
 import { VoteControl } from '../posts/VoteControl';
+import { AddReactionButton, ReactionBar, ReactionPicker, useReactionToggle } from '../reactions/ReactionBar';
 import { Avatar } from '../ui/Avatar';
 import { Button, buttonVariants } from '../ui/Button';
 import { ConfirmDialog } from '../ui/Dialog';
@@ -51,12 +56,52 @@ interface Ctx {
 const CommentsCtx = createContext<Ctx | null>(null);
 const useCtx = () => useContext(CommentsCtx)!;
 
+/* ---------------- Borrador local del composer ---------------- */
+
+interface LocalCommentDraft {
+  body: string;
+  attachments?: Attachment[];
+  savedAt: number;
+}
+
+/** Los adjuntos sueltos se limpian a las 24 h en el server: no restauramos los más viejos. */
+const ATTACHMENT_TTL = 20 * 60 * 60 * 1000;
+
+const draftKey = (postId: number, parentId?: number) => `foro:comment-draft:${postId}:${parentId ?? 'root'}`;
+
+function readCommentDraft(postId: number, parentId?: number): LocalCommentDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(postId, parentId));
+    if (!raw) return null;
+    const d = JSON.parse(raw) as LocalCommentDraft;
+    if (!d?.body && !d?.attachments?.length) return null;
+    if (d.attachments?.length && Date.now() - (d.savedAt ?? 0) > ATTACHMENT_TTL) d.attachments = [];
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+function writeCommentDraft(postId: number, parentId: number | undefined, d: Omit<LocalCommentDraft, 'savedAt'> | null) {
+  try {
+    if (!d || (!d.body.trim() && !d.attachments?.length)) localStorage.removeItem(draftKey(postId, parentId));
+    else localStorage.setItem(draftKey(postId, parentId), JSON.stringify({ ...d, savedAt: Date.now() }));
+  } catch {
+    /* storage bloqueado */
+  }
+}
+
+function hasCommentDraft(postId: number, parentId?: number) {
+  return !!readCommentDraft(postId, parentId);
+}
+
 /* ---------------- Composer ---------------- */
 
 function Composer({
   postId,
   parentId,
   initial = '',
+  initialAttachments,
   onDone,
   onCancel,
   autoFocus,
@@ -67,6 +112,7 @@ function Composer({
   postId: number;
   parentId?: number;
   initial?: string;
+  initialAttachments?: Attachment[];
   onDone?: () => void;
   onCancel?: () => void;
   autoFocus?: boolean;
@@ -74,34 +120,55 @@ function Composer({
   placeholder?: string;
   editId?: number;
 }) {
-  const [body, setBody] = useState(initial);
+  // Borrador local (solo al crear, no al editar): se restaura al volver al post.
+  const local = useMemo(() => (editId ? null : readCommentDraft(postId, parentId)), [editId, postId, parentId]);
+  const [body, setBody] = useState(local?.body ?? initial);
   const [error, setError] = useState<string | null>(null);
+  const uploads = useAttachmentUploads({ max: ATTACHMENT_LIMITS.comment, initial: editId ? initialAttachments : local?.attachments });
+  const initialIds = useRef((initialAttachments ?? []).map((a) => a.id));
   const create = useCreateComment(postId);
   const edit = useEditComment(postId);
   const requireUser = useRequireUser();
   const pending = create.isPending || edit.isPending;
   const trimmed = body.trim();
 
+  useEffect(() => {
+    if (editId) return;
+    const t = setTimeout(() => writeCommentDraft(postId, parentId, { body, attachments: uploads.attachments }), 400);
+    return () => clearTimeout(t);
+  }, [editId, postId, parentId, body, uploads.attachments]);
+
   const submit = () => {
-    if (!trimmed || pending) return;
+    if (!trimmed || pending || uploads.isUploading) return;
     if (trimmed.length > MAX_COMMENT) return setError(`Máximo ${MAX_COMMENT.toLocaleString('es-AR')} caracteres.`);
+    if (uploads.hasErrors) return setError('Hay archivos que no se pudieron subir: reintentá o quitalos.');
     if (!requireUser()) return;
     setError(null);
     const opts = {
       onSuccess: () => {
         setBody('');
+        uploads.reset([]);
+        if (!editId) writeCommentDraft(postId, parentId, null);
         onDone?.();
       },
       onError: (e: unknown) => {
-        if (isApiError(e) && e.status === 400) setError(e.details?.body ?? e.message);
+        if (isApiError(e) && e.status === 400) setError(e.details?.body ?? e.details?.attachmentIds ?? e.message);
       },
     };
-    if (editId) edit.mutate({ id: editId, body: trimmed }, opts);
-    else create.mutate({ body: trimmed, parentId }, opts);
+    if (editId) {
+      const changed = !sameIds(uploads.ids, initialIds.current);
+      edit.mutate({ id: editId, body: trimmed, ...(changed ? { attachmentIds: uploads.ids } : {}) }, opts);
+    } else create.mutate({ body: trimmed, parentId, attachmentIds: uploads.ids }, opts);
+  };
+
+  const cancel = () => {
+    // Al editar, lo que se subió y no se guardó se borra. Al crear, el borrador local se conserva.
+    if (editId) uploads.discard();
+    onCancel?.();
   };
 
   return (
-    <div>
+    <FileDropTarget uploads={uploads}>
       <MarkdownEditor
         value={body}
         onChange={setBody}
@@ -110,22 +177,25 @@ function Composer({
         minRows={3}
         maxLength={MAX_COMMENT}
         invalid={!!error}
+        onAttachFiles={uploads.add}
+        attachments={uploads.count > 0 ? <UploadList uploads={uploads} dense /> : undefined}
+        footerStart={<AttachButton uploads={uploads} label="Adjuntar archivos" />}
         placeholder={placeholder ?? '¿Qué opinás? Podés mencionar a alguien con @usuario'}
         footer={
           <div className="flex items-center gap-2">
             {onCancel && (
-              <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
+              <Button size="sm" variant="ghost" onClick={cancel} disabled={pending}>
                 Cancelar
               </Button>
             )}
-            <Button size="sm" onClick={submit} disabled={!trimmed} loading={pending}>
-              {submitLabel}
+            <Button size="sm" onClick={submit} disabled={!trimmed || uploads.isUploading} loading={pending}>
+              {uploads.isUploading ? 'Subiendo…' : submitLabel}
             </Button>
           </div>
         }
       />
       {error && <p className="mt-1.5 text-[13px] text-rose-600 dark:text-rose-400">{error}</p>}
-    </div>
+    </FileDropTarget>
   );
 }
 
@@ -143,7 +213,7 @@ function flattenReplies(list: Comment[], parent: Comment): { comment: Comment; r
 function CommentItem({ c, depth, flat, replyTo }: { c: Comment; depth: number; flat?: boolean; replyTo?: string }) {
   const { post, me, canAccept, canReply, highlightId, maxDepth } = useCtx();
   const [collapsed, setCollapsed] = useState(false);
-  const [replying, setReplying] = useState(false);
+  const [replying, setReplying] = useState(() => !c.isDeleted && hasCommentDraft(post.id, c.id));
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -151,6 +221,9 @@ function CommentItem({ c, depth, flat, replyTo }: { c: Comment; depth: number; f
   const vote = useVoteComment(post.id);
   const del = useDeleteComment(post.id);
   const accept = useAcceptAnswer(post.id);
+  const reactionTarget = { type: 'comment' as const, id: c.id, postId: post.id };
+  const react = useReactionToggle(reactionTarget, c.isDeleted);
+  const reactions = c.reactions ?? [];
 
   const isMine = !!me && c.author?.id === me.id;
   const isOp = !!c.author && c.author.id === post.author?.id;
@@ -245,6 +318,7 @@ function CommentItem({ c, depth, flat, replyTo }: { c: Comment; depth: number; f
                       postId={post.id}
                       editId={c.id}
                       initial={c.body}
+                      initialAttachments={c.attachments}
                       autoFocus
                       submitLabel="Guardar"
                       onDone={() => {
@@ -257,14 +331,30 @@ function CommentItem({ c, depth, flat, replyTo }: { c: Comment; depth: number; f
                 ) : c.isDeleted ? (
                   <p className="mt-1 text-sm italic text-zinc-400 dark:text-zinc-500">Este comentario fue eliminado.</p>
                 ) : (
-                  <Markdown size="sm" className="mt-1">
-                    {c.body}
-                  </Markdown>
+                  <>
+                    <Markdown size="sm" className="mt-1">
+                      {c.body}
+                    </Markdown>
+                    <AttachmentList attachments={c.attachments} variant="compact" className="mt-2.5" />
+                    {reactions.length > 0 && <ReactionBar target={reactionTarget} reactions={reactions} size="sm" className="mt-2" />}
+                  </>
                 )}
 
                 {!editing && (
                   <div className="-ml-1.5 mt-1.5 flex flex-wrap items-center gap-0.5">
                     {!c.isDeleted && <VoteControl score={c.score} myVote={c.myVote} onVote={onVote} orientation="horizontal" size="sm" label="comentario" className="mr-1 bg-transparent dark:bg-transparent" />}
+                    {!c.isDeleted && reactions.length === 0 && (
+                      <ReactionPicker
+                        reactions={reactions}
+                        onPick={react}
+                        trigger={
+                          <AddReactionButton
+                            label="Reaccionar al comentario"
+                            className="size-7 text-zinc-400 ring-0 hover:text-zinc-900 dark:hover:text-zinc-100"
+                          />
+                        }
+                      />
+                    )}
                     {canReply && depth < 50 && (
                       <button
                         type="button"
@@ -402,6 +492,7 @@ function AcceptedAnswer({ c }: { c: Comment }) {
       <Markdown size="sm" className="mt-2">
         {c.body}
       </Markdown>
+      <AttachmentList attachments={c.attachments} variant="compact" className="mt-2.5" />
     </div>
   );
 }
@@ -423,7 +514,7 @@ export function CommentSection({ post }: { post: PostDetail }) {
   const { me } = useMe();
   const location = useLocation();
   const [sort, setSort] = useState<CommentSort>('best');
-  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(() => hasCommentDraft(post.id));
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const q = useComments(post.id, sort);
   const wide = useMediaQuery('(min-width: 640px)');

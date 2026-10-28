@@ -14,8 +14,8 @@ export function TagPage() {
   const { slug = '' } = useParams();
   const tags = useTags();
   const tag = tags.data?.find((t) => t.slug === slug);
-  const { sort, t, setSort, setT } = useFeedParams();
-  const feed = usePostsFeed({ tag: slug, sort, t });
+  const { sort, t, setSort, setT, withFiles, setWithFiles } = useFeedParams();
+  const feed = usePostsFeed({ tag: slug, sort, t, hasAttachments: withFiles });
   useDocumentTitle(`#${tag?.name ?? slug}`);
 
   return (
@@ -33,7 +33,7 @@ export function TagPage() {
           </div>
         </div>
       </div>
-      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} className="mb-4" />
+      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} withFiles={withFiles} onWithFiles={setWithFiles} className="mb-4" />
       <PostFeed query={feed} empty={{ icon: Sparkles, title: 'No hay posts con esta etiqueta', description: 'Cuando alguien publique con #' + (tag?.name ?? slug) + ' lo vas a ver acá.' }} />
     </PageLayout>
   );

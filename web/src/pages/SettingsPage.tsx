@@ -1,4 +1,28 @@
-import { Check, KeyRound, LayoutList, Monitor, Moon, Palette, Rows3, Save, Sun, Trash, TriangleAlert, Upload, User, UserCog } from 'lucide-react';
+import {
+  AtSign,
+  Bell,
+  CircleCheckBig,
+  Check,
+  FaceSlightlySmilingPlus,
+  KeyRound,
+  LayoutList,
+  Mail,
+  MessageCircle,
+  MessageSquare,
+  Monitor,
+  Moon,
+  Palette,
+  Rows3,
+  Save,
+  Sun,
+  Trash,
+  TriangleAlert,
+  Upload,
+  User,
+  UserCog,
+  UserPlus,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -6,21 +30,24 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field, Input, Textarea } from '@/components/ui/Input';
-import { Card } from '@/components/ui/misc';
+import { Badge, Card, Skeleton } from '@/components/ui/misc';
+import { Switch } from '@/components/ui/Switch';
 import { useDocumentTitle } from '@/hooks';
 import { errorMessage, isApiError, validateImage } from '@/lib/api';
 import { useFeedView, useTheme, type FeedView, type ThemePref } from '@/lib/store';
-import type { Me } from '@/lib/types';
+import type { Me, Preferences } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { useChangePassword, useMe } from '@/queries/auth';
+import { useAuthProviders, useChangePassword, useMe } from '@/queries/auth';
+import { DEFAULT_PREFERENCES, usePreferences, useUpdatePreferences } from '@/queries/preferences';
 import { useDeleteAccount, useRemoveAvatar, useUpdateProfile, useUploadAvatar } from '@/queries/users';
-import { FormAlert, PasswordInput, PasswordStrength, passwordValid } from './auth/authBits';
+import { FormAlert, GoogleLogo, PasswordInput, PasswordStrength, passwordValid } from './auth/authBits';
 
-type Tab = 'profile' | 'account' | 'appearance';
+type Tab = 'profile' | 'account' | 'notifications' | 'appearance';
 
 const TABS: { value: Tab; label: string; icon: typeof User }[] = [
   { value: 'profile', label: 'Perfil', icon: User },
   { value: 'account', label: 'Cuenta', icon: UserCog },
+  { value: 'notifications', label: 'Notificaciones', icon: Bell },
   { value: 'appearance', label: 'Apariencia', icon: Palette },
 ];
 
@@ -155,10 +182,67 @@ function ProfileTab({ me }: { me: Me }) {
   );
 }
 
+function SignInMethods({ me }: { me: Me }) {
+  const providers = useAuthProviders();
+  const linked = !!me.googleLinked;
+  const hasPassword = me.hasPassword !== false;
+  const showGoogle = linked || !!providers.data?.google;
+  const row = 'flex items-center gap-3.5 py-3.5 first:pt-0 last:pb-0';
+  return (
+    <Section title="Inicio de sesión" description="Las formas que tenés para entrar a tu cuenta.">
+      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+        {showGoogle && (
+          <div className={row}>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white ring-1 ring-zinc-200 dark:bg-zinc-800 dark:ring-zinc-700">
+              <GoogleLogo className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Google</p>
+              <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+                {linked ? 'Podés entrar con “Continuar con Google”.' : `Se vincula solo si entrás con una cuenta de Google con el email ${me.email}.`}
+              </p>
+            </div>
+            {linked ? (
+              <Badge tone="emerald" icon={CircleCheckBig} className="shrink-0">
+                Google vinculado
+              </Badge>
+            ) : (
+              <Badge tone="zinc" className="shrink-0">
+                No vinculado
+              </Badge>
+            )}
+          </div>
+        )}
+        <div className={row}>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700">
+            <KeyRound className="size-[18px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Usuario y contraseña</p>
+            <p className="text-[13px] text-zinc-500 dark:text-zinc-400">
+              {hasPassword ? `Entrás con @${me.username} o tu email.` : 'Todavía no creaste una contraseña: más abajo podés hacerlo.'}
+            </p>
+          </div>
+          {hasPassword ? (
+            <Badge tone="emerald" icon={CircleCheckBig} className="shrink-0">
+              Configurada
+            </Badge>
+          ) : (
+            <Badge tone="amber" className="shrink-0">
+              Sin contraseña
+            </Badge>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function AccountTab({ me }: { me: Me }) {
   const navigate = useNavigate();
   const change = useChangePassword();
   const del = useDeleteAccount();
+  const hasPassword = me.hasPassword !== false;
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -169,17 +253,18 @@ function AccountTab({ me }: { me: Me }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
-    if (!pw.current) errs.currentPassword = 'Ingresá tu contraseña actual.';
+    if (hasPassword && !pw.current) errs.currentPassword = 'Ingresá tu contraseña actual.';
     if (!passwordValid(pw.next)) errs.newPassword = 'Mínimo 8 caracteres, con al menos una letra y un número.';
     if (pw.confirm !== pw.next) errs.confirm = 'Las contraseñas no coinciden.';
     setErrors(errs);
     setFormError(null);
     if (Object.keys(errs).length) return;
     change.mutate(
-      { currentPassword: pw.current, newPassword: pw.next },
+      hasPassword ? { currentPassword: pw.current, newPassword: pw.next } : { newPassword: pw.next },
       {
         onSuccess: () => {
-          toast.success('Contraseña actualizada', { description: 'Cerramos tus sesiones en otros dispositivos.' });
+          if (hasPassword) toast.success('Contraseña actualizada', { description: 'Cerramos tus sesiones en otros dispositivos.' });
+          else toast.success('¡Contraseña creada!', { description: `Ahora también podés entrar con @${me.username} y tu contraseña.` });
           setPw({ current: '', next: '', confirm: '' });
         },
         onError: (err) => {
@@ -197,23 +282,31 @@ function AccountTab({ me }: { me: Me }) {
         <Input value={me.email} readOnly disabled className="max-w-md" />
       </Section>
 
+      <SignInMethods me={me} />
+
       <form onSubmit={submit}>
         <Section
-          title="Cambiar contraseña"
-          description="Al cambiarla se cierran las sesiones abiertas en otros dispositivos."
+          title={hasPassword ? 'Cambiar contraseña' : 'Crear contraseña'}
+          description={
+            hasPassword
+              ? 'Al cambiarla se cierran las sesiones abiertas en otros dispositivos.'
+              : 'Tu cuenta se creó con Google. Si creás una contraseña, también vas a poder entrar con tu usuario o email.'
+          }
           footer={
             <Button type="submit" loading={change.isPending}>
               <KeyRound />
-              Actualizar contraseña
+              {hasPassword ? 'Actualizar contraseña' : 'Crear contraseña'}
             </Button>
           }
         >
           {formError && <FormAlert>{formError}</FormAlert>}
           <div className="grid max-w-md gap-4">
-            <Field label="Contraseña actual" error={errors.currentPassword}>
-              {(p) => <PasswordInput {...p} autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />}
-            </Field>
-            <Field label="Nueva contraseña" error={errors.newPassword}>
+            {hasPassword && (
+              <Field label="Contraseña actual" error={errors.currentPassword}>
+                {(p) => <PasswordInput {...p} autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />}
+              </Field>
+            )}
+            <Field label={hasPassword ? 'Nueva contraseña' : 'Contraseña'} error={errors.newPassword}>
               {(p) => (
                 <>
                   <PasswordInput {...p} autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
@@ -221,7 +314,7 @@ function AccountTab({ me }: { me: Me }) {
                 </>
               )}
             </Field>
-            <Field label="Repetí la nueva contraseña" error={errors.confirm}>
+            <Field label={hasPassword ? 'Repetí la nueva contraseña' : 'Repetí la contraseña'} error={errors.confirm}>
               {(p) => <PasswordInput {...p} autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />}
             </Field>
           </div>
@@ -255,7 +348,7 @@ function AccountTab({ me }: { me: Me }) {
           }
         }}
         title="¿Seguro que querés borrar tu cuenta?"
-        description="Esta acción no se puede deshacer. Confirmá con tu contraseña."
+        description={hasPassword ? 'Esta acción no se puede deshacer. Confirmá con tu contraseña.' : 'Esta acción no se puede deshacer. Para confirmar, escribí tu nombre de usuario.'}
         size="sm"
         footer={
           <>
@@ -264,15 +357,22 @@ function AccountTab({ me }: { me: Me }) {
             </Button>
             <Button
               variant="danger"
-              disabled={!deletePw}
+              disabled={hasPassword ? !deletePw : deletePw.trim().toLowerCase() !== me.username.toLowerCase()}
               loading={del.isPending}
               onClick={() =>
-                del.mutate(deletePw, {
+                del.mutate(hasPassword ? { password: deletePw } : { confirmUsername: deletePw.trim() }, {
                   onSuccess: () => {
                     toast.success('Tu cuenta fue borrada. ¡Gracias por haber sido parte!');
                     navigate('/', { replace: true });
                   },
-                  onError: (err) => setDeleteError(isApiError(err) && (err.status === 401 || err.status === 400 || err.status === 403) ? 'La contraseña no es correcta.' : errorMessage(err)),
+                  onError: (err) =>
+                    setDeleteError(
+                      isApiError(err) && (err.status === 401 || err.status === 400 || err.status === 403)
+                        ? hasPassword
+                          ? 'La contraseña no es correcta.'
+                          : 'El nombre de usuario no coincide.'
+                        : errorMessage(err),
+                    ),
                 })
               }
             >
@@ -281,10 +381,146 @@ function AccountTab({ me }: { me: Me }) {
           </>
         }
       >
-        <Field label="Contraseña" error={deleteError}>
-          {(p) => <PasswordInput {...p} autoFocus autoComplete="current-password" value={deletePw} onChange={(e) => setDeletePw(e.target.value)} />}
-        </Field>
+        {hasPassword ? (
+          <Field label="Contraseña" error={deleteError}>
+            {(p) => <PasswordInput {...p} autoFocus autoComplete="current-password" value={deletePw} onChange={(e) => setDeletePw(e.target.value)} />}
+          </Field>
+        ) : (
+          <Field
+            label={
+              <>
+                Escribí <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">{me.username}</span> para confirmar
+              </>
+            }
+            error={deleteError}
+          >
+            {(p) => (
+              <Input
+                {...p}
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="h-11 font-mono"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder={me.username}
+              />
+            )}
+          </Field>
+        )}
       </Dialog>
+    </div>
+  );
+}
+
+const PREF_ROWS: { key: keyof Preferences; title: string; description: string; icon: LucideIcon; tint: string }[] = [
+  {
+    key: 'emailReplies',
+    title: 'Respuestas',
+    description: 'Cuando comentan tu post, responden tu comentario o aceptan tu respuesta.',
+    icon: MessageSquare,
+    tint: 'bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300',
+  },
+  {
+    key: 'emailMentions',
+    title: 'Menciones',
+    description: 'Cuando alguien te nombra con @usuario en un post o comentario.',
+    icon: AtSign,
+    tint: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
+  },
+  {
+    key: 'emailMessages',
+    title: 'Mensajes directos',
+    description: 'Cuando te escriben por privado.',
+    icon: MessageCircle,
+    tint: 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300',
+  },
+  {
+    key: 'emailFollows',
+    title: 'Nuevos seguidores',
+    description: 'Cuando alguien empieza a seguirte.',
+    icon: UserPlus,
+    tint: 'bg-pink-50 text-pink-600 dark:bg-pink-500/10 dark:text-pink-300',
+  },
+  {
+    key: 'emailReactions',
+    title: 'Reacciones',
+    description: 'Cuando alguien reacciona con un emoji a lo que publicaste.',
+    icon: FaceSlightlySmilingPlus,
+    tint: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300',
+  },
+];
+
+function NotificationsTab({ me }: { me: Me }) {
+  const q = usePreferences(me.preferences);
+  const update = useUpdatePreferences();
+  const prefs = q.data ?? (q.isError ? { ...DEFAULT_PREFERENCES, ...me.preferences } : undefined);
+  const activeCount = prefs ? PREF_ROWS.filter((r) => prefs[r.key]).length : 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start gap-3.5 rounded-2xl border border-brand-200/70 bg-linear-to-br from-brand-50 to-white p-4 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-transparent">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-brand-600 shadow-xs ring-1 ring-brand-200/70 dark:bg-zinc-900 dark:text-brand-300 dark:ring-brand-500/25">
+          <Mail className="size-5" />
+        </span>
+        <div className="min-w-0 text-sm">
+          <p className="font-semibold text-zinc-950 dark:text-white">Te mandamos un mail solo cuando no estás conectado</p>
+          <p className="mt-0.5 leading-relaxed text-zinc-600 dark:text-zinc-400">
+            Si tenés el foro abierto, te enterás al instante por la campanita. Los mails llegan a{' '}
+            <span className="font-medium text-zinc-800 dark:text-zinc-200">{me.email}</span> y nunca más de uno cada 15 minutos por conversación.
+          </p>
+        </div>
+      </div>
+
+      <Section
+        title="Avisos por mail"
+        description={prefs ? (activeCount === 0 ? 'No vas a recibir ningún mail de actividad.' : `Activaste ${activeCount} de ${PREF_ROWS.length} tipos de aviso.`) : 'Elegí de qué querés enterarte por mail.'}
+      >
+        <ul className="-my-1 divide-y divide-zinc-100 dark:divide-zinc-800">
+          {PREF_ROWS.map((r) => {
+            const id = `pref-${r.key}`;
+            return (
+              <li key={r.key} className="flex items-center gap-3.5 py-3.5">
+                <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', r.tint)}>
+                  <r.icon className="size-[18px]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <label htmlFor={id} id={`${id}-label`} className="block cursor-pointer text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {r.title}
+                  </label>
+                  <p id={`${id}-desc`} className="text-[13px] leading-snug text-zinc-500 dark:text-zinc-400">
+                    {r.description}
+                  </p>
+                </div>
+                {prefs ? (
+                  <Switch
+                    id={id}
+                    checked={prefs[r.key]}
+                    aria-labelledby={`${id}-label`}
+                    aria-describedby={`${id}-desc`}
+                    onCheckedChange={(checked) =>
+                      update.mutate(
+                        { [r.key]: checked },
+                        {
+                          onError: () => toast.error('No se pudo guardar la preferencia', { id: 'pref-error', description: 'Volvimos al valor anterior. Probá de nuevo.' }),
+                        },
+                      )
+                    }
+                  />
+                ) : (
+                  <Skeleton className="h-6 w-11 rounded-full" />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Section>
+
+      <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+        <Bell className="mt-0.5 size-3.5 shrink-0" />
+        Los avisos de moderación y el mail de bienvenida se mandan siempre. Las notificaciones dentro del foro no cambian con estas opciones.
+      </p>
     </div>
   );
 }
@@ -417,7 +653,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="mb-1 text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">Configuración</h1>
-      <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">Administrá tu perfil, tu cuenta y cómo se ve el foro.</p>
+      <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">Administrá tu perfil, tu cuenta, tus avisos y cómo se ve el foro.</p>
       <div className="flex flex-col gap-6 md:flex-row">
         <nav aria-label="Secciones" className="no-scrollbar -mx-3 flex shrink-0 gap-1 overflow-x-auto px-3 md:mx-0 md:w-52 md:flex-col md:px-0">
           {TABS.map((t) => (
@@ -441,6 +677,7 @@ export default function SettingsPage() {
         <div className="min-w-0 flex-1">
           {tab === 'profile' && <ProfileTab me={me} />}
           {tab === 'account' && <AccountTab me={me} />}
+          {tab === 'notifications' && <NotificationsTab me={me} />}
           {tab === 'appearance' && <AppearanceTab />}
         </div>
       </div>

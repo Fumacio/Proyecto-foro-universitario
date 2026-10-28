@@ -1,6 +1,6 @@
 import * as RT from '@radix-ui/react-tooltip';
 import { FaceSlightlySmilingPlus } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { forwardRef, useEffect, useRef, useState, type ComponentPropsWithoutRef, type KeyboardEvent, type ReactNode } from 'react';
 import { REACTIONS, type ReactionEmoji, type ReactionSummary, type UserSummary } from '@/lib/types';
 import { cn, displayName, formatCount } from '@/lib/utils';
 import { useMe, useRequireUser } from '@/queries/auth';
@@ -106,15 +106,7 @@ export function ReactionPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        {trigger ?? (
-          <button
-            type="button"
-            aria-label="Agregar reacción"
-            className="relative z-10 grid size-7 shrink-0 place-items-center rounded-full text-zinc-400 ring-1 ring-inset ring-zinc-200 transition-colors hover:bg-zinc-100 hover:text-zinc-700 data-[state=open]:bg-zinc-100 data-[state=open]:text-zinc-700 dark:ring-zinc-700/80 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 dark:data-[state=open]:bg-zinc-800"
-          >
-            <FaceSlightlySmilingPlus className="size-4" />
-          </button>
-        )}
+        {trigger ?? <AddReactionButton />}
       </PopoverTrigger>
       <PopoverContent
         align={align}
@@ -136,6 +128,27 @@ export function ReactionPicker({
   );
 }
 
+/** Disparador del picker con el mismo estilo que los chips (círculo con 🙂+). */
+export const AddReactionButton = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<'button'> & { small?: boolean; label?: string }>(
+  function AddReactionButton({ small, label = 'Agregar reacción', className, ...props }, ref) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        aria-label={label}
+        {...props}
+        className={cn(
+          'relative z-10 grid shrink-0 place-items-center rounded-full text-zinc-400 ring-1 ring-inset ring-zinc-200 transition-colors hover:bg-zinc-100 hover:text-zinc-700 data-[state=open]:bg-zinc-100 data-[state=open]:text-zinc-700 dark:ring-zinc-700/80 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 dark:data-[state=open]:bg-zinc-800',
+          small ? 'size-6' : 'size-7',
+          className,
+        )}
+      >
+        <FaceSlightlySmilingPlus className={small ? 'size-3.5' : 'size-4'} />
+      </button>
+    );
+  },
+);
+
 /* ---------------- Chip ---------------- */
 
 function ReactionChip({
@@ -148,7 +161,7 @@ function ReactionChip({
   target: ReactionTarget;
   r: ReactionSummary;
   onToggle: (e: ReactionEmoji) => void;
-  size: 'sm' | 'md';
+  size: 'xs' | 'sm' | 'md';
   bump: number;
 }) {
   const { me } = useMe();
@@ -206,13 +219,13 @@ function ReactionChip({
           onContextMenu={(e) => e.preventDefault()}
           className={cn(
             'relative z-10 inline-flex shrink-0 select-none items-center rounded-full font-semibold tabular-nums ring-1 ring-inset transition-[background-color,color,box-shadow,transform] duration-150 active:scale-95 [-webkit-touch-callout:none]',
-            size === 'sm' ? 'h-6 gap-1 px-1.5 text-[11.5px]' : 'h-7 gap-1.5 px-2 text-[12.5px]',
+            size === 'xs' ? 'h-5 gap-0.5 px-1.5 text-[11px]' : size === 'sm' ? 'h-6 gap-1 px-1.5 text-[11.5px]' : 'h-7 gap-1.5 px-2 text-[12.5px]',
             r.reacted
               ? 'bg-brand-50 text-brand-700 ring-brand-300/80 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-400/40 dark:hover:bg-brand-500/25'
               : 'bg-zinc-100/80 text-zinc-600 ring-transparent hover:bg-zinc-200/70 hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white',
           )}
         >
-          <span key={bump} aria-hidden className={cn('leading-none', size === 'sm' ? 'text-[13px]' : 'text-[15px]', bump > 0 && 'animate-bump')}>
+          <span key={bump} aria-hidden className={cn('leading-none', size === 'xs' ? 'text-[11.5px]' : size === 'sm' ? 'text-[13px]' : 'text-[15px]', bump > 0 && 'animate-bump')}>
             {r.emoji}
           </span>
           <span>{formatCount(r.count)}</span>
@@ -252,7 +265,7 @@ export function ReactionBar({
 }: {
   target: ReactionTarget;
   reactions: ReactionSummary[] | undefined;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   max?: number;
   showAdd?: boolean;
   disabled?: boolean;
@@ -279,7 +292,13 @@ export function ReactionBar({
         <ReactionChip key={r.emoji} target={target} r={r} size={size} onToggle={onToggle} bump={bumps[r.emoji] ?? 0} />
       ))}
       {hidden > 0 && <span className="text-[11px] font-medium text-zinc-400">+{hidden}</span>}
-      {showAdd && !disabled && <ReactionPicker reactions={list} onPick={onToggle} />}
+      {showAdd && !disabled && (
+        <ReactionPicker
+          reactions={list}
+          onPick={onToggle}
+          trigger={size === 'md' ? undefined : <AddReactionButton small />}
+        />
+      )}
     </div>
   );
 }

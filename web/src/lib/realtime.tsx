@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/ui/Avatar';
 import { NotificationIcon, notificationPlainText, notificationTarget } from '@/components/notifications/NotificationItem';
-import { appendMessage } from '@/queries/messages';
+import { appendMessage, messagePreview } from '@/queries/messages';
 import { API_BASE } from './api';
 import { patchMe } from './cache';
 import { navigateTo } from './navigation';
@@ -117,7 +117,7 @@ export function useRealtime(userId: number | null) {
                   </span>
                 }
                 title={`Mensaje de ${displayName(m.sender)}`}
-                body={m.body}
+                body={messagePreview(m)}
                 to={`/messages/${m.conversationId}`}
               />
             ),

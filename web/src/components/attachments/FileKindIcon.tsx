@@ -81,7 +81,7 @@ export function FileName({ name, className }: { name: string; className?: string
   const [head, tail] = splitFilename(name);
   return (
     <span title={name} className={cn('flex min-w-0', className)}>
-      <span className="truncate">{head}</span>
+      <span className="truncate whitespace-pre">{head}</span>
       <span className="shrink-0 whitespace-pre">{tail}</span>
     </span>
   );

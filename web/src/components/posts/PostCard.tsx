@@ -1,10 +1,11 @@
-import { Bookmark, ChartColumn, CircleQuestionMark, Ellipsis, Flag, Link2, MessageSquare, Share2, FileText } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { Bookmark, ChartColumn, CircleQuestionMark, Ellipsis, FaceSlightlySmilingPlus, Flag, Link2, MessageSquare, Paperclip, Share2, FileText } from 'lucide-react';
+import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { PostListItem } from '@/lib/types';
 import { cn, formatCount, hostname, postPath } from '@/lib/utils';
 import { useRequireUser } from '@/queries/auth';
 import { CommunityChip, TagChip, TimeAgo, UserLink } from '../common';
+import { ReactionBar, ReactionPicker, useReactionToggle } from '../reactions/ReactionBar';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu';
 import { Dot, Skeleton } from '../ui/misc';
 import { PollWidget } from './PollWidget';
@@ -68,6 +69,24 @@ function ActionButton({
   );
 }
 
+const actionCls = (active?: boolean) =>
+  cn(
+    'relative z-10 inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium transition-colors',
+    active
+      ? 'text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10'
+      : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 data-[state=open]:bg-zinc-100 data-[state=open]:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 dark:data-[state=open]:bg-zinc-800 dark:data-[state=open]:text-zinc-100',
+  );
+
+/** Botón "Reaccionar" de la barra de acciones (cuando el post todavía no tiene reacciones). */
+const ReactActionButton = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<'button'>>(function ReactActionButton(props, ref) {
+  return (
+    <button ref={ref} type="button" aria-label="Reaccionar" {...props} className={actionCls()}>
+      <FaceSlightlySmilingPlus className="size-[17px]" strokeWidth={1.9} />
+      <span className="hidden sm:inline">Reaccionar</span>
+    </button>
+  );
+});
+
 function PostMoreMenu({ post }: { post: PostListItem }) {
   const [reporting, setReporting] = useState(false);
   const requireUser = useRequireUser();
@@ -125,6 +144,9 @@ function MetaLine({ post, showCommunity }: CardProps) {
 export function PostCard({ post, showCommunity = true }: CardProps) {
   const { vote, toggleBookmark, share } = usePostActions(post);
   const href = postPath(post);
+  const reactions = post.reactions ?? [];
+  const files = post.attachmentCount ?? 0;
+  const react = useReactionToggle({ type: 'post', id: post.id });
   return (
     <article
       className={cn(
@@ -180,12 +202,20 @@ export function PostCard({ post, showCommunity = true }: CardProps) {
             ))}
           </div>
         )}
+        {reactions.length > 0 && <ReactionBar target={{ type: 'post', id: post.id }} reactions={reactions} size="sm" className="mt-2.5" />}
         <div className="-ml-2.5 mt-2 flex items-center gap-0.5 sm:-ml-2.5">
           <VoteControl score={post.score} myVote={post.myVote} onVote={vote} orientation="horizontal" size="sm" className="mr-1 sm:hidden" />
           <ActionButton icon={MessageSquare} label="Comentarios" to={`${href}#comentarios`}>
             <span className="tabular-nums">{formatCount(post.commentCount)}</span>
             <span className="hidden sm:inline">{post.commentCount === 1 ? 'comentario' : 'comentarios'}</span>
           </ActionButton>
+          {files > 0 && (
+            <ActionButton icon={Paperclip} label={files === 1 ? '1 archivo adjunto' : `${files} archivos adjuntos`} to={`${href}#adjuntos`}>
+              <span className="tabular-nums">{files}</span>
+              <span className="hidden md:inline">{files === 1 ? 'archivo' : 'archivos'}</span>
+            </ActionButton>
+          )}
+          {reactions.length === 0 && <ReactionPicker reactions={reactions} onPick={react} trigger={<ReactActionButton />} />}
           <ActionButton icon={Share2} label="Compartir" onClick={share}>
             <span className="hidden sm:inline">Compartir</span>
           </ActionButton>
@@ -232,7 +262,16 @@ export function PostCompactRow({ post, showCommunity = true }: CardProps) {
           <span className="sm:hidden">
             <Dot /> {formatCount(post.score)} pts
           </span>
+          {(post.attachmentCount ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-0.5 font-medium text-zinc-500 dark:text-zinc-400" title={`${post.attachmentCount} archivos adjuntos`}>
+              <Dot /> <Paperclip className="ml-1 size-3" />
+              {post.attachmentCount}
+            </span>
+          )}
           <PostBadges post={post} className="ml-0.5" />
+          {(post.reactions?.length ?? 0) > 0 && (
+            <ReactionBar target={{ type: 'post', id: post.id }} reactions={post.reactions} size="xs" max={3} showAdd={false} className="ml-0.5 gap-1" />
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">

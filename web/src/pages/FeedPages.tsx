@@ -1,4 +1,4 @@
-import { Bookmark, CircleQuestionMark, Compass, LayoutGrid, Rss, Sparkles, X } from 'lucide-react';
+import { Bookmark, CircleQuestionMark, Compass, LayoutGrid, Paperclip, Rss, Sparkles, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { TagChip } from '@/components/common';
 import { HomeRail, PopularCommunities, TrendingTags } from '@/components/layout/RightRail';
@@ -83,17 +83,19 @@ function WelcomeStrip() {
 
 export function HomePage() {
   useDocumentTitle('Inicio');
-  const { sort, t, tag, setSort, setT, setTag } = useFeedParams();
-  const query = usePostsFeed({ sort, t, tag });
+  const { sort, t, tag, setSort, setT, setTag, withFiles, setWithFiles } = useFeedParams();
+  const query = usePostsFeed({ sort, t, tag, hasAttachments: withFiles });
   return (
     <PageLayout aside={<HomeRail />}>
       <WelcomeStrip />
-      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} className="mb-3" />
+      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} withFiles={withFiles} onWithFiles={setWithFiles} className="mb-3" />
       <TagFilter selected={tag} onSelect={setTag} />
       <PostFeed
         query={query}
         empty={
-          tag
+          withFiles
+            ? { icon: Paperclip, title: 'No hay posts con archivos', description: tag ? 'Probá con otra etiqueta o quitá los filtros.' : 'Cuando alguien comparta apuntes o archivos los vas a ver acá.' }
+            : tag
             ? { icon: Sparkles, title: 'No hay posts con esta etiqueta', description: 'Probá con otra etiqueta o quitá el filtro.' }
             : { icon: Sparkles, title: 'Todavía no hay posts', description: 'Sé la primera persona en publicar algo.', action: <Link to="/submit" className={buttonVariants()}>Crear post</Link> }
         }

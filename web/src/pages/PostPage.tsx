@@ -7,6 +7,7 @@ import {
   Lock,
   LockOpen,
   MessageSquare,
+  Paperclip,
   Pencil,
   Pin,
   PinOff,
@@ -18,6 +19,9 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { AttachmentList } from '@/components/attachments/AttachmentList';
+import { AttachmentPicker } from '@/components/attachments/AttachmentPicker';
+import { sameIds, useAttachmentUploads } from '@/components/attachments/useAttachmentUploads';
 import { CommentSection } from '@/components/comments/CommentSection';
 import { CommunityChip, TagChip, TimeAgo, UserLink } from '@/components/common';
 import { ImageDropzone } from '@/components/ImageDropzone';
@@ -32,6 +36,7 @@ import { ReportDialog } from '@/components/posts/ReportDialog';
 import { TagPicker } from '@/components/posts/TagPicker';
 import { usePostActions } from '@/components/posts/usePostActions';
 import { VoteControl } from '@/components/posts/VoteControl';
+import { ReactionBar } from '@/components/reactions/ReactionBar';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button, buttonVariants } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/Dialog';
@@ -41,6 +46,7 @@ import { EmptyState, ErrorState, Skeleton } from '@/components/ui/misc';
 import { Tooltip } from '@/components/ui/Popover';
 import { useDocumentTitle } from '@/hooks';
 import { isApiError } from '@/lib/api';
+import { ATTACHMENT_LIMITS } from '@/lib/attachments';
 import { fullDate } from '@/lib/time';
 import type { PostDetail } from '@/lib/types';
 import { cn, formatCount, slugify } from '@/lib/utils';
@@ -78,9 +84,18 @@ function EditPost({ post, onDone }: { post: PostDetail; onDone: () => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const update = useUpdatePost(post.id);
   const bodyRequired = post.type === 'TEXT' || post.type === 'QUESTION';
+  const initialIds = (post.attachments ?? []).map((a) => a.id);
+  const uploads = useAttachmentUploads({ max: ATTACHMENT_LIMITS.post, initial: post.attachments });
+
+  const cancel = () => {
+    uploads.discard();
+    onDone();
+  };
 
   const save = () => {
+    if (uploads.isUploading) return;
     const errs: Record<string, string> = {};
+    if (uploads.hasErrors) errs.attachmentIds = 'Hay archivos que no se pudieron subir: reintentá o quitalos.';
     const t = title.trim();
     if (t.length < 3 || t.length > 200) errs.title = 'El título tiene que tener entre 3 y 200 caracteres.';
     if (bodyRequired && !body.trim()) errs.body = 'El contenido no puede estar vacío.';
@@ -88,7 +103,7 @@ function EditPost({ post, onDone }: { post: PostDetail; onDone: () => void }) {
     setErrors(errs);
     if (Object.keys(errs).length) return;
     update.mutate(
-      { title: t, body, tagIds, imageUrl },
+      { title: t, body, tagIds, imageUrl, ...(sameIds(uploads.ids, initialIds) ? {} : { attachmentIds: uploads.ids }) },
       {
         onSuccess: () => {
           toast.success('Cambios guardados');
@@ -108,8 +123,13 @@ function EditPost({ post, onDone }: { post: PostDetail; onDone: () => void }) {
       </Field>
       <div>
         <p className="mb-1.5 text-[13px] font-medium text-zinc-700 dark:text-zinc-300">Contenido</p>
-        <MarkdownEditor value={body} onChange={setBody} maxLength={40000} minRows={8} invalid={!!errors.body} onSubmit={save} />
+        <MarkdownEditor value={body} onChange={setBody} maxLength={40000} minRows={8} invalid={!!errors.body} onSubmit={save} onAttachFiles={uploads.add} />
         {errors.body && <p className="mt-1.5 text-[13px] text-rose-600">{errors.body}</p>}
+      </div>
+      <div>
+        <p className="mb-1.5 text-[13px] font-medium text-zinc-700 dark:text-zinc-300">Archivos adjuntos</p>
+        <AttachmentPicker uploads={uploads} />
+        {errors.attachmentIds && <p className="mt-1.5 text-[13px] text-rose-600">{errors.attachmentIds}</p>}
       </div>
       <div>
         <p className="mb-1.5 text-[13px] font-medium text-zinc-700 dark:text-zinc-300">Imagen de portada</p>
@@ -120,11 +140,11 @@ function EditPost({ post, onDone }: { post: PostDetail; onDone: () => void }) {
         <TagPicker value={tagIds} onChange={setTagIds} />
       </div>
       <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-        <Button variant="secondary" onClick={onDone} disabled={update.isPending}>
+        <Button variant="secondary" onClick={cancel} disabled={update.isPending}>
           Cancelar
         </Button>
-        <Button onClick={save} loading={update.isPending}>
-          Guardar cambios
+        <Button onClick={save} loading={update.isPending} disabled={uploads.isUploading}>
+          {uploads.isUploading ? 'Subiendo archivos…' : 'Guardar cambios'}
         </Button>
       </div>
     </div>
@@ -167,8 +187,9 @@ function PostView({ post }: { post: PostDetail }) {
 
   // #comentarios → scroll a la sección
   useEffect(() => {
-    if (location.hash === '#comentarios') {
-      requestAnimationFrame(() => document.getElementById('comentarios')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    if (location.hash === '#comentarios' || location.hash === '#adjuntos') {
+      const id = location.hash.slice(1);
+      requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     }
   }, [location.hash]);
 
@@ -232,11 +253,22 @@ function PostView({ post }: { post: PostDetail }) {
                     <PollWidget postId={post.id} poll={post.poll} />
                   </div>
                 )}
+                {(post.attachments?.length ?? 0) > 0 && (
+                  <section id="adjuntos" aria-labelledby="adjuntos-title" className="mt-6 scroll-mt-24">
+                    <h2 id="adjuntos-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      <Paperclip className="size-4 text-zinc-400" />
+                      Archivos adjuntos
+                      <span className="font-normal text-zinc-400">({post.attachments!.length})</span>
+                    </h2>
+                    <AttachmentList attachments={post.attachments} />
+                  </section>
+                )}
+                <ReactionBar target={{ type: 'post', id: post.id }} reactions={post.reactions} className="mt-5" />
               </>
             )}
 
             {!editing && (
-              <div className="mt-5 flex flex-wrap items-center gap-1.5">
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <VoteControl score={post.score} myVote={post.myVote} onVote={vote} orientation="horizontal" size="sm" className="sm:hidden" />
                 <a
                   href="#comentarios"

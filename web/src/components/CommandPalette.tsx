@@ -1,18 +1,5 @@
 import * as RD from '@radix-ui/react-dialog';
-import {
-  ArrowRight,
-  Bell,
-  CornerDownLeft,
-  FileText,
-  House,
-  LayoutGrid,
-  MessageCircle,
-  Plus,
-  Search,
-  SearchX,
-  Settings,
-  type LucideIcon,
-} from 'lucide-react';
+import { ArrowRight, Bell, CornerDownLeft, FileText, House, LayoutGrid, MessageCircle, Plus, Search, SearchX, Settings, type LucideIcon, FilePen } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { useDebounce } from '@/hooks';
@@ -91,6 +78,7 @@ export function CommandPalette() {
       if (me) {
         quick.push(
           { key: 'q-submit', section: 'Ir a', to: '/submit', render: <Row icon={<QuickIcon icon={Plus} />} title="Crear post" /> },
+          { key: 'q-drafts', section: 'Ir a', to: '/drafts', render: <Row icon={<QuickIcon icon={FilePen} />} title="Borradores" /> },
           { key: 'q-notif', section: 'Ir a', to: '/notifications', render: <Row icon={<QuickIcon icon={Bell} />} title="Notificaciones" /> },
           { key: 'q-msg', section: 'Ir a', to: '/messages', render: <Row icon={<QuickIcon icon={MessageCircle} />} title="Mensajes" /> },
           { key: 'q-settings', section: 'Ir a', to: '/settings', render: <Row icon={<QuickIcon icon={Settings} />} title="Configuración" /> },

@@ -1,4 +1,4 @@
-import { ChevronDown, PenLine, SearchX, Sparkles, Users, FileText } from 'lucide-react';
+import { ChevronDown, Paperclip, PenLine, SearchX, Sparkles, Users, FileText } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { CommunityIcon } from '@/components/common';
 import { JoinButton } from '@/components/communities/JoinButton';
@@ -16,8 +16,10 @@ import { usePostsFeed } from '@/queries/posts';
 export function CommunityPage() {
   const { slug = '' } = useParams();
   const q = useCommunity(slug);
-  const { sort, t, setSort, setT } = useFeedParams();
-  const feed = usePostsFeed({ community: slug, sort, t });
+  const { sort, t, setSort, setT, withFiles, setWithFiles } = useFeedParams();
+  const feed = usePostsFeed({ community: slug, sort, t, hasAttachments: withFiles });
+  /** En la comunidad de apuntes el filtro "Con archivos" se destaca con un aviso. */
+  const isResources = slug === 'apuntes';
   const c = q.data;
   useDocumentTitle(c ? c.name : 'Comunidad');
 
@@ -110,11 +112,37 @@ export function CommunityPage() {
         )}
       </div>
 
-      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} className="mb-4" />
+      {isResources && !withFiles && (
+        <button
+          type="button"
+          onClick={() => setWithFiles(true)}
+          className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-brand-200/70 bg-linear-to-r from-brand-50 to-white p-3 text-left transition-colors hover:border-brand-300 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-transparent dark:hover:border-brand-500/40"
+        >
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-brand-600 ring-1 ring-brand-200 dark:bg-zinc-900 dark:text-brand-300 dark:ring-brand-500/30">
+            <Paperclip className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm">
+            <span className="block font-semibold text-zinc-900 dark:text-zinc-100">¿Buscás apuntes para descargar?</span>
+            <span className="block text-[13px] text-zinc-500 dark:text-zinc-400">Mostrá solo los posts con PDF, resúmenes y otros archivos.</span>
+          </span>
+          <span className="hidden shrink-0 text-[13px] font-semibold text-brand-600 sm:inline dark:text-brand-400">Ver con archivos</span>
+        </button>
+      )}
+      <FeedControls sort={sort} t={t} onSort={setSort} onT={setT} withFiles={withFiles} onWithFiles={setWithFiles} className="mb-4" />
       <PostFeed
         query={feed}
         showCommunity={false}
-        empty={{
+        empty={withFiles ? {
+          icon: Paperclip,
+          title: 'Todavía no hay posts con archivos acá',
+          description: 'Compartí tus apuntes o resúmenes: adjuntá PDF, Word, Excel y más al crear un post.',
+          action: c && (
+            <Link to={`/submit?community=${c.slug}`} className={buttonVariants()}>
+              <PenLine />
+              Compartir apuntes
+            </Link>
+          ),
+        } : {
           icon: Sparkles,
           title: 'Esta comunidad está esperando su primer post',
           description: 'Arrancá la conversación: compartí un apunte o hacé una pregunta.',

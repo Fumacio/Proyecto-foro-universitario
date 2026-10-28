@@ -22,6 +22,7 @@ import { TagPage } from './pages/TagPage';
 const SubmitPage = lazy(() => import('./pages/SubmitPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const DraftsPage = lazy(() => import('./pages/DraftsPage'));
 const ModPage = lazy(() => import('./pages/mod/ModPage'));
 
 function Lazy({ children }: { children: ReactNode }) {
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
               { path: 't/:slug', element: <TagPage /> },
               { path: 'p/:id/:slug?', element: <PostPage /> },
               { path: 'submit', element: <RequireAuth><Lazy><SubmitPage /></Lazy></RequireAuth> },
+              { path: 'drafts', element: <RequireAuth><Lazy><DraftsPage /></Lazy></RequireAuth> },
               { path: 'u/:username', element: <ProfilePage /> },
               { path: 'search', element: <SearchPage /> },
               { path: 'notifications', element: <RequireAuth><NotificationsPage /></RequireAuth> },

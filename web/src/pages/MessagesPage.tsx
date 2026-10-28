@@ -1,6 +1,9 @@
 import { ArrowLeft, MessageCircle, Search, SendHorizontal, SquarePen } from 'lucide-react';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { AttachmentList } from '@/components/attachments/AttachmentList';
+import { AttachButton, FileDropTarget, UploadList } from '@/components/attachments/AttachmentPicker';
+import { useAttachmentUploads } from '@/components/attachments/useAttachmentUploads';
 import { RoleBadge } from '@/components/common';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/misc';
 import { Spinner } from '@/components/ui/Spinner';
 import { useDebounce, useDocumentTitle } from '@/hooks';
+import { ATTACHMENT_LIMITS } from '@/lib/attachments';
 import { activeConversation } from '@/lib/store';
 import { conversationTime, dayLabel, fullDate, timeHM } from '@/lib/time';
 import type { Conversation, Message } from '@/lib/types';
@@ -165,7 +169,7 @@ function ConversationList({ items, activeId, loading, error, onRetry, onNew }: {
                   </span>
                   <span className="mt-0.5 flex items-center gap-2">
                     <span className={cn('min-w-0 flex-1 truncate text-[13px]', c.unread ? 'text-zinc-800 dark:text-zinc-200' : 'text-zinc-500 dark:text-zinc-400')}>
-                      {c.lastMessage ? `${mine ? 'Vos: ' : ''}${c.lastMessage.body}` : 'Sin mensajes todavía'}
+                      {c.lastMessage ? `${mine ? 'Vos: ' : ''}${c.lastMessage.body.trim() || '📎 Archivo adjunto'}` : 'Sin mensajes todavía'}
                     </span>
                     {c.unread > 0 && (
                       <span className="grid h-5 min-w-5 place-items-center rounded-full bg-brand-600 px-1.5 text-[10px] font-bold text-white">{c.unread}</span>
@@ -212,6 +216,7 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
   const send = useSendMessage(conversation.id);
   const markRead = useMarkConversationRead();
   const [text, setText] = useState('');
+  const uploads = useAttachmentUploads({ max: ATTACHMENT_LIMITS.message });
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const prevHeight = useRef<number | null>(null);
@@ -283,15 +288,28 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
     }
   };
 
+  const canSend = (!!text.trim() || uploads.ids.length > 0) && !uploads.isUploading;
+
   const submit = () => {
     const body = text.trim();
-    if (!body || send.isPending) return;
+    if (send.isPending) return;
+    if (uploads.isUploading) return;
+    if (!body && uploads.ids.length === 0) return;
     if (!requireUser()) return;
-    send.mutate(body, { onSuccess: () => setText('') });
+    send.mutate(
+      { body, attachmentIds: uploads.ids },
+      {
+        onSuccess: () => {
+          setText('');
+          uploads.reset([]);
+          taRef.current?.focus();
+        },
+      },
+    );
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <FileDropTarget uploads={uploads} className="flex h-full min-h-0 flex-col" label="Soltá para adjuntar al mensaje">
       <div className="flex items-center gap-3 border-b border-zinc-100 px-3 py-2.5 sm:px-4 dark:border-zinc-800">
         <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Volver a la lista" onClick={onBack}>
           <ArrowLeft />
@@ -350,22 +368,27 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
                           {run.items.map((m, i) => {
                             const firstOf = i === 0;
                             const lastOf = i === run.items.length - 1;
+                            const files = m.attachments ?? [];
                             return (
-                              <div
-                                key={m.id}
-                                title={fullDate(m.createdAt)}
-                                className={cn(
-                                  'whitespace-pre-wrap break-words px-3.5 py-2 text-[14.5px] leading-snug [overflow-wrap:anywhere]',
-                                  mine
-                                    ? 'bg-brand-600 text-white'
-                                    : 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100',
-                                  'rounded-2xl',
-                                  mine ? cn('rounded-br-md', !firstOf && 'rounded-tr-md') : cn('rounded-bl-md', !firstOf && 'rounded-tl-md'),
-                                  lastOf && 'shadow-xs',
+                              <Fragment key={m.id}>
+                                {m.body.trim() && (
+                                  <div
+                                    title={fullDate(m.createdAt)}
+                                    className={cn(
+                                      'whitespace-pre-wrap break-words px-3.5 py-2 text-[14.5px] leading-snug [overflow-wrap:anywhere]',
+                                      mine
+                                        ? 'bg-brand-600 text-white'
+                                        : 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100',
+                                      'rounded-2xl',
+                                      mine ? cn('rounded-br-md', !firstOf && 'rounded-tr-md') : cn('rounded-bl-md', !firstOf && 'rounded-tl-md'),
+                                      lastOf && files.length === 0 && 'shadow-xs',
+                                    )}
+                                  >
+                                    {m.body}
+                                  </div>
                                 )}
-                              >
-                                {m.body}
-                              </div>
+                                {files.length > 0 && <AttachmentList attachments={files} variant="chat" mine={mine} className="mt-0.5" />}
+                              </Fragment>
                             );
                           })}
                           <span className="px-1 text-[10.5px] text-zinc-400">{timeHM(run.items[run.items.length - 1].createdAt)}</span>
@@ -385,8 +408,11 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
           e.preventDefault();
           submit();
         }}
-        className="flex items-end gap-2 border-t border-zinc-100 p-3 dark:border-zinc-800"
+        className="border-t border-zinc-100 p-3 dark:border-zinc-800"
       >
+        <UploadList uploads={uploads} dense className="mb-2.5" />
+        <div className="flex items-end gap-1.5 sm:gap-2">
+        <AttachButton uploads={uploads} size="icon" className="size-10 shrink-0 rounded-full text-zinc-500" label="Adjuntar archivos" />
         <textarea
           ref={taRef}
           value={text}
@@ -399,15 +425,23 @@ function ConversationView({ conversation, onBack }: { conversation: Conversation
               submit();
             }
           }}
-          placeholder="Escribí un mensaje…"
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData?.files ?? []);
+            if (files.length) {
+              e.preventDefault();
+              uploads.add(files);
+            }
+          }}
+          placeholder={uploads.count > 0 ? 'Agregá un mensaje (opcional)…' : 'Escribí un mensaje…'}
           aria-label="Mensaje"
-          className="max-h-36 min-h-10 flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[14.5px] leading-snug focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-brand-400 dark:focus:bg-zinc-900"
+          className="max-h-36 min-h-10 min-w-0 flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-[14.5px] leading-snug focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:border-brand-400 dark:focus:bg-zinc-900"
         />
-        <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Enviar" disabled={!text.trim()} loading={send.isPending}>
+        <Button type="submit" size="icon" className="size-10 shrink-0 rounded-full" aria-label={uploads.isUploading ? 'Esperando a que suban los archivos' : 'Enviar'} disabled={!canSend} loading={send.isPending}>
           <SendHorizontal />
         </Button>
+        </div>
       </form>
-    </div>
+    </FileDropTarget>
   );
 }
 

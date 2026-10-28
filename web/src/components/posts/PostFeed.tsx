@@ -1,5 +1,5 @@
 import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
-import { CalendarRange, ChevronDown, Flame, LayoutList, MessagesSquare, Rows3, Sparkles, TrendingUp, type LucideIcon } from 'lucide-react';
+import { CalendarRange, ChevronDown, Flame, LayoutList, MessagesSquare, Paperclip, Rows3, Sparkles, TrendingUp, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useInfiniteScroll } from '@/hooks';
@@ -117,7 +117,7 @@ export const TIME_RANGES: { value: TimeRange; label: string }[] = [
 const SORT_VALUES = SORTS.map((s) => s.value);
 const TIME_VALUES = TIME_RANGES.map((t) => t.value);
 
-/** Lee/escribe `sort`, `t` y `tag` en la URL. */
+/** Lee/escribe `sort`, `t`, `tag` y `files` (feed "Con archivos") en la URL. */
 export function useFeedParams(defaultSort: PostSort = 'hot') {
   const [params, setParams] = useSearchParams();
   const rawSort = params.get('sort') as PostSort | null;
@@ -125,6 +125,7 @@ export function useFeedParams(defaultSort: PostSort = 'hot') {
   const sort: PostSort = rawSort && SORT_VALUES.includes(rawSort) ? rawSort : defaultSort;
   const t: TimeRange = rawT && TIME_VALUES.includes(rawT) ? rawT : sort === 'top' ? 'week' : 'all';
   const tag = params.get('tag') ?? undefined;
+  const withFiles = params.get('files') === '1';
 
   const update = (patch: Record<string, string | undefined>) => {
     setParams(
@@ -147,7 +148,33 @@ export function useFeedParams(defaultSort: PostSort = 'hot') {
     setSort: (s: PostSort) => update({ sort: s === defaultSort ? undefined : s, t: undefined }),
     setT: (v: TimeRange) => update({ t: v }),
     setTag: (v: string | undefined) => update({ tag: v }),
+    withFiles,
+    setWithFiles: (v: boolean) => update({ files: v ? '1' : undefined }),
   };
+}
+
+/** Chip "Con archivos": muestra solo posts con adjuntos (apuntes, TPs, resúmenes…). */
+export function FilesToggle({ active, onChange, className }: { active: boolean; onChange: (v: boolean) => void; className?: string }) {
+  return (
+    <Tooltip content={active ? 'Mostrar todos los posts' : 'Solo posts con PDF, apuntes y otros archivos'}>
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => onChange(!active)}
+        className={cn(
+          'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium shadow-xs transition-colors',
+          className,
+          active
+            ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-200 dark:hover:bg-brand-500/25'
+            : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800',
+        )}
+      >
+        <Paperclip className={cn('size-4', active ? 'text-brand-600 dark:text-brand-300' : 'text-zinc-400')} />
+        Con archivos
+        {active && <X className="-mr-0.5 size-3.5 opacity-70" />}
+      </button>
+    </Tooltip>
+  );
 }
 
 export function FeedControls({
@@ -158,6 +185,8 @@ export function FeedControls({
   className,
   sorts = SORTS.map((s) => s.value),
   right,
+  withFiles,
+  onWithFiles,
 }: {
   sort: PostSort;
   t: TimeRange;
@@ -166,6 +195,9 @@ export function FeedControls({
   className?: string;
   sorts?: PostSort[];
   right?: ReactNode;
+  /** Filtro "Con archivos" (si se pasa `onWithFiles`). */
+  withFiles?: boolean;
+  onWithFiles?: (v: boolean) => void;
 }) {
   const [view, setView] = useFeedView();
   const showTime = sort === 'top' || sort === 'comments';
@@ -207,6 +239,7 @@ export function FeedControls({
             </MenuContent>
           </Menu>
         )}
+        {onWithFiles && <FilesToggle active={!!withFiles} onChange={onWithFiles} />}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {right}

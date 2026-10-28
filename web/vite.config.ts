@@ -1,5 +1,7 @@
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig, type ProxyOptions } from 'vite';
+import { defineConfig, type Plugin, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -23,8 +25,29 @@ const streamProxy: ProxyOptions = {
   },
 };
 
+/**
+ * PWA: estampa un id de build en dist/sw.js (`__BUILD_ID__`), así cada deploy cambia el archivo del
+ * service worker → el navegador detecta la versión nueva y la app ofrece "Actualizar".
+ */
+function swBuildId(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'foro-sw-build-id',
+    apply: 'build',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      const file = resolve(outDir, 'sw.js');
+      if (!existsSync(file)) return;
+      const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      writeFileSync(file, readFileSync(file, 'utf8').replaceAll('__BUILD_ID__', id));
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), swBuildId()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
