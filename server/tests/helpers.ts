@@ -12,6 +12,11 @@ const passwordHash = bcrypt.hashSync(PASSWORD, 4);
 
 export async function resetDb(): Promise<void> {
   await prisma.$transaction([
+    prisma.attachment.deleteMany(),
+    prisma.postReaction.deleteMany(),
+    prisma.commentReaction.deleteMany(),
+    prisma.draft.deleteMany(),
+    prisma.emailLog.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.message.deleteMany(),
     prisma.conversationParticipant.deleteMany(),

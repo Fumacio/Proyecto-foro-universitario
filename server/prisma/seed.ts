@@ -4,10 +4,25 @@
  *   npm run db:reset   → borra todo y vuelve a sembrar
  *   npm run db:seed -- --force   → re-siembra sobre una DB existente (borra los datos)
  */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import type { NotificationType, Prisma } from '@prisma/client';
+import { FILES_DIR, fileTypeFor } from '../src/lib/files.js';
 import { prisma } from '../src/lib/prisma.js';
 import { extractMentions, hotScore, slugify } from '../src/lib/text.js';
+import {
+  CHULETA_GIT_TXT,
+  CLIENTES_PEDIDOS_CSV,
+  DER_NOTAS_TXT,
+  graficoSen3xPng,
+  NORMALIZACION_SQL,
+  PUNTEROS_MD,
+  RECORRER_ARRAY_C,
+  RECORRER_ARRAY_CORREGIDO_C,
+  resumenAnalisisPdf,
+} from './seed-files.js';
 import {
   BOOKMARKS,
   COMMUNITIES,
@@ -49,6 +64,11 @@ function clampTime(t: number, after: number): number {
 
 async function wipe(): Promise<void> {
   await prisma.$transaction([
+    prisma.attachment.deleteMany(),
+    prisma.postReaction.deleteMany(),
+    prisma.commentReaction.deleteMany(),
+    prisma.draft.deleteMany(),
+    prisma.emailLog.deleteMany(),
     prisma.notification.deleteMany(),
     prisma.message.deleteMany(),
     prisma.conversationParticipant.deleteMany(),
@@ -72,7 +92,53 @@ async function wipe(): Promise<void> {
   ]);
   // IDs desde 1 otra vez (solo SQLite; en otros motores se ignora).
   await prisma.$executeRawUnsafe('DELETE FROM sqlite_sequence').catch(() => undefined);
+  // Archivos adjuntos de siembras anteriores.
+  fs.rmSync(FILES_DIR, { recursive: true, force: true });
+  fs.mkdirSync(FILES_DIR, { recursive: true });
 }
+
+/** Escribe el archivo en UPLOAD_DIR/files y crea la fila del adjunto. */
+async function addAttachment(opts: {
+  filename: string;
+  content: Buffer | string;
+  uploaderId: number;
+  createdAt: number;
+  downloads: number;
+  postId?: number;
+  commentId?: number;
+  messageId?: number;
+  draftId?: number;
+}): Promise<void> {
+  const type = fileTypeFor(opts.filename);
+  if (!type) throw new Error(`[seed] tipo de adjunto no permitido: ${opts.filename}`);
+  const buf = typeof opts.content === 'string' ? Buffer.from(opts.content, 'utf8') : opts.content;
+  const storedName = crypto.randomBytes(16).toString('hex');
+  fs.writeFileSync(path.join(FILES_DIR, storedName), buf);
+  await prisma.attachment.create({
+    data: {
+      uploaderId: opts.uploaderId,
+      filename: opts.filename,
+      storedName,
+      mimeType: type.mime,
+      size: buf.length,
+      kind: type.kind,
+      downloadCount: opts.downloads,
+      createdAt: new Date(opts.createdAt),
+      postId: opts.postId ?? null,
+      commentId: opts.commentId ?? null,
+      messageId: opts.messageId ?? null,
+      draftId: opts.draftId ?? null,
+    },
+  });
+}
+
+const POST_EMOJIS: Record<string, string[]> = {
+  QUESTION: ['👍', '🤔', '🔥', '❤️', '😮'],
+  TEXT: ['👍', '❤️', '🔥', '🎉', '😮'],
+  POLL: ['👍', '😂', '🤔', '🎉'],
+  LINK: ['🔥', '👍', '❤️', '🎉'],
+};
+const FUN_COMMUNITIES = new Set(['off-topic', 'vida-universitaria']);
 
 interface CommentRecord {
   id: number;
@@ -339,6 +405,157 @@ async function main(): Promise<void> {
     }),
   });
 
+  // ---------- reacciones ----------
+  const pickWeighted = (list: string[]): string => {
+    const weights = list.map((_, i) => Math.max(1, 5 - i * 1.3));
+    let r = rand() * weights.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < list.length; i++) {
+      r -= weights[i]!;
+      if (r <= 0) return list[i]!;
+    }
+    return list[0]!;
+  };
+  const postReactions: Prisma.PostReactionCreateManyInput[] = [];
+  for (const p of ordered) {
+    if (p.key === 'spam-apuntes') continue;
+    const id = postId.get(p.key)!;
+    const created = postCreated.get(id)!;
+    const palette = FUN_COMMUNITIES.has(p.community) ? ['😂', '❤️', '👍', '🎉', '😮'] : (POST_EMOJIS[p.type] ?? POST_EMOJIS.TEXT!);
+    for (const username of voters) {
+      if (username === p.by || (userJoined.get(username) ?? 0) > created) continue;
+      const act = userActivity.get(username) ?? 0.3;
+      if (rand() > act * (0.12 + 0.5 * p.quality)) continue;
+      const emojis = new Set([pickWeighted(palette)]);
+      if (rand() < 0.2) emojis.add(pickWeighted(palette));
+      for (const emoji of emojis) {
+        postReactions.push({ userId: uid(username), postId: id, emoji, createdAt: new Date(clampTime(created + between(0.2, 40) * HOUR, created)) });
+      }
+    }
+  }
+  await prisma.postReaction.createMany({ data: postReactions });
+
+  const commentReactions: Prisma.CommentReactionCreateManyInput[] = [];
+  for (const c of comments) {
+    const accepted = !!c.key && acceptedKeys.has(c.key);
+    for (const username of voters) {
+      const voterId = uid(username);
+      if (voterId === c.authorId || (userJoined.get(username) ?? 0) > c.createdAt) continue;
+      const act = userActivity.get(username) ?? 0.3;
+      if (rand() > act * (accepted ? 0.35 : c.username === 'santi_k' ? 0.02 : 0.1)) continue;
+      const emoji = pickWeighted(accepted ? ['👍', '🔥', '❤️', '🎉'] : ['👍', '❤️', '😂', '🔥', '🤔']);
+      commentReactions.push({ userId: voterId, commentId: c.id, emoji, createdAt: new Date(clampTime(c.createdAt + between(0.1, 20) * HOUR, c.createdAt)) });
+    }
+  }
+  await prisma.commentReaction.createMany({ data: commentReactions });
+
+  // ---------- adjuntos ----------
+  const postOf = (key: string) => {
+    const id = postId.get(key);
+    if (!id) throw new Error(`[seed] post desconocido: ${key}`);
+    return { id, createdAt: postCreated.get(id)! };
+  };
+  const pdfPost = postOf('drive-apuntes');
+  await addAttachment({
+    filename: 'Resumen Análisis I – Límites y derivadas.pdf',
+    content: resumenAnalisisPdf(),
+    uploaderId: uid('sofi_mate'),
+    createdAt: pdfPost.createdAt,
+    postId: pdfPost.id,
+    downloads: 87,
+  });
+  const graphPost = postOf('limite-sen3x');
+  await addAttachment({
+    filename: 'grafico sen(3x)÷x.png',
+    content: graficoSen3xPng(),
+    uploaderId: uid('belu_frt'),
+    createdAt: graphPost.createdAt,
+    postId: graphPost.id,
+    downloads: 23,
+  });
+  const segPost = postOf('segfault');
+  await addAttachment({
+    filename: 'recorrer_array.c',
+    content: RECORRER_ARRAY_C,
+    uploaderId: uid('juanpi_mec'),
+    createdAt: segPost.createdAt,
+    postId: segPost.id,
+    downloads: 19,
+  });
+  const segProf = comments.find((c) => c.id === commentKey.get('seg-prof'))!;
+  await addAttachment({
+    filename: 'recorrer_array_corregido.c',
+    content: RECORRER_ARRAY_CORREGIDO_C,
+    uploaderId: segProf.authorId,
+    createdAt: segProf.createdAt,
+    commentId: segProf.id,
+    downloads: 31,
+  });
+  const gitPost = postOf('guia-git');
+  await addAttachment({
+    filename: 'chuleta_git.txt',
+    content: CHULETA_GIT_TXT,
+    uploaderId: uid('lucia_dev'),
+    createdAt: gitPost.createdAt,
+    postId: gitPost.id,
+    downloads: 42,
+  });
+  const joinPost = postOf('left-join');
+  await addAttachment({
+    filename: 'clientes_y_pedidos.csv',
+    content: CLIENTES_PEDIDOS_CSV,
+    uploaderId: uid('lucia_dev'),
+    createdAt: joinPost.createdAt,
+    postId: joinPost.id,
+    downloads: 14,
+  });
+  const normPost = postOf('normalizacion');
+  await addAttachment({
+    filename: 'normalizacion_3FN.sql',
+    content: NORMALIZACION_SQL,
+    uploaderId: uid('prof_garcia'),
+    createdAt: normPost.createdAt,
+    postId: normPost.id,
+    downloads: 56,
+  });
+
+  // ---------- borradores (lucia_dev) ----------
+  const lucia = uid('lucia_dev');
+  const draftPunteros = await prisma.draft.create({
+    data: {
+      userId: lucia,
+      communityId: communityId.get('programacion')!,
+      type: 'TEXT',
+      title: 'Punteros en C sin miedo (apunte para Programación)',
+      body:
+        'Armé este apunte para los que están con el TP de listas. Todavía me falta la parte de aritmética de punteros.\n\n' +
+        '## ¿Qué es un puntero?\nUna variable que guarda una **dirección de memoria**…',
+      tagIds: [tagId.get('apuntes')!, tagId.get('tp')!],
+      createdAt: new Date(now - 26 * HOUR),
+      updatedAt: new Date(now - 2 * HOUR),
+    },
+  });
+  await addAttachment({
+    filename: 'punteros_en_c.md',
+    content: PUNTEROS_MD,
+    uploaderId: lucia,
+    createdAt: now - 3 * HOUR,
+    draftId: draftPunteros.id,
+    downloads: 0,
+  });
+  await prisma.draft.create({
+    data: {
+      userId: lucia,
+      communityId: communityId.get('sistemas')!,
+      type: 'POLL',
+      title: '¿Qué electiva de 4.º año recomiendan?',
+      body: 'Estoy armando el plan para el año que viene y no me decido. ¿Cuál cursaron y qué tal?',
+      tagIds: [tagId.get('consulta')!],
+      poll: { options: ['Inteligencia Artificial', 'Seguridad Informática', 'Desarrollo Mobile', 'Ciencia de Datos'], closesInDays: 7 },
+      createdAt: new Date(now - 50 * HOUR),
+      updatedAt: new Date(now - 30 * HOUR),
+    },
+  });
+
   // ---------- notificaciones (derivadas de la actividad) ----------
   const notifications: Prisma.NotificationCreateManyInput[] = [];
   const READ_BEFORE = now - 36 * HOUR;
@@ -388,6 +605,27 @@ async function main(): Promise<void> {
   }
   for (const [a, b] of FOLLOWS) {
     pushNotification({ userId: uid(b), type: 'FOLLOW', actorId: uid(a), createdAt: followTimes.get(`${a}|${b}`)! });
+  }
+  // REACTION: solo la primera reacción de cada persona a cada contenido, y solo las de la última semana.
+  const authorOfPost = new Map<number, number>();
+  for (const p of POSTS) authorOfPost.set(postId.get(p.key)!, uid(p.by));
+  const commentById = new Map(comments.map((c) => [c.id, c]));
+  const reactionNotified = new Set<string>();
+  const RECENT = now - 7 * DAY;
+  for (const r of [...postReactions].sort((x, y) => +x.createdAt! - +y.createdAt!)) {
+    const t = +(r.createdAt as Date);
+    const key = `p${r.postId}|${r.userId}`;
+    if (t < RECENT || reactionNotified.has(key)) continue;
+    reactionNotified.add(key);
+    pushNotification({ userId: authorOfPost.get(r.postId)!, type: 'REACTION', actorId: r.userId, postId: r.postId, message: r.emoji, createdAt: t });
+  }
+  for (const r of [...commentReactions].sort((x, y) => +x.createdAt! - +y.createdAt!)) {
+    const t = +(r.createdAt as Date);
+    const key = `c${r.commentId}|${r.userId}`;
+    const c = commentById.get(r.commentId)!;
+    if (t < RECENT || reactionNotified.has(key)) continue;
+    reactionNotified.add(key);
+    pushNotification({ userId: c.authorId, type: 'REACTION', actorId: r.userId, postId: c.postId, commentId: c.id, message: r.emoji, createdAt: t });
   }
 
   // ---------- moderación: ban + reportes ----------
@@ -471,9 +709,24 @@ async function main(): Promise<void> {
     messageCount += msgs.length;
   }
 
+  // Adjunto en un mensaje directo: las notas del DER que Lucía le pasa a Vale.
+  const derMessage = await prisma.message.findFirst({ where: { senderId: lucia, body: { startsWith: 'Hola Vale! Te paso nuestro DER' } } });
+  if (derMessage) {
+    await addAttachment({
+      filename: 'DER biblioteca – notas.txt',
+      content: DER_NOTAS_TXT,
+      uploaderId: lucia,
+      createdAt: derMessage.createdAt.getTime(),
+      messageId: derMessage.id,
+      downloads: 2,
+    });
+  }
+  const attachmentCount = await prisma.attachment.count();
+
   console.info(
     `[seed] ✔ ${USERS.length} usuarios, ${COMMUNITIES.length} comunidades, ${TAGS.length} etiquetas, ${POSTS.length} posts, ` +
       `${comments.length} comentarios, ${postVotes.length + commentVotes.length} votos, ${pollVotes.length} votos en encuestas, ` +
+      `${postReactions.length + commentReactions.length} reacciones, ${attachmentCount} adjuntos, 2 borradores, ` +
       `${notifications.length} notificaciones, ${CONVERSATIONS.length} conversaciones (${messageCount} mensajes) ` +
       `en ${((Date.now() - started) / 1000).toFixed(1)} s.`,
   );

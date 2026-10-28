@@ -173,8 +173,11 @@ export function queueNotificationEmail(n: NotificationRow): void {
   const pref = PREF_BY_TYPE[n.type];
   if (!pref || isOnline(n.userId)) return;
   enqueue(n.userId, async () => {
-    const user = await prisma.user.findUnique({ where: { id: n.userId }, select: { email: true, [pref]: true } });
-    if (!user || !(user as Record<string, unknown>)[pref]) return;
+    const user = await prisma.user.findUnique({
+      where: { id: n.userId },
+      select: { email: true, emailReplies: true, emailMentions: true, emailMessages: true, emailFollows: true, emailReactions: true },
+    });
+    if (!user?.[pref]) return;
     const mail = notificationMail(n);
     if (!mail) return;
     if (!(await allowAndLog(n.userId, n.type, n.post ? `post:${n.post.id}` : ''))) return;

@@ -97,7 +97,7 @@ describe('GET /api/stream', () => {
     const conv = (await beto.post('/api/conversations').send({ username: 'ana_sse' })).body.conversation;
     await beto.post(`/api/conversations/${conv.id}/messages`).send({ body: '¡Hola por SSE!' });
     const message = (await stream.waitFor('message')) as { body: string; conversationId: number };
-    expect(message).toMatchObject({ body: '¡Hola por SSE!', conversationId: conv.id, sender: { username: 'beto_sse' } });
+    expect(message).toMatchObject({ body: '¡Hola por SSE!', conversationId: conv.id, sender: { username: 'beto_sse' }, attachments: [] });
     expect(await stream.waitFor('unread')).toEqual({ notifications: 1, messages: 1 });
 
     // El emisor también recibe su mensaje (otras pestañas)

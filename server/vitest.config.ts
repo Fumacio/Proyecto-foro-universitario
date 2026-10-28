@@ -18,6 +18,11 @@ export default defineConfig({
       JWT_SECRET: 'test-secret-0123456789abcdef0123456789abcdef0123456789abcdef',
       FRONTEND_URL: 'http://localhost:5173',
       SMTP_HOST: '',
+      // Límites chicos para poder probarlos sin subir cientos de MB.
+      MAX_UPLOAD_MB: '1',
+      UPLOAD_QUOTA_MB_PER_DAY: '3',
+      GOOGLE_CLIENT_ID: '',
+      GOOGLE_CLIENT_SECRET: '',
     },
   },
 });
